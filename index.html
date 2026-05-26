@@ -233,6 +233,19 @@ input[type=date]{font-family:'DM Mono',monospace;}
   .modal-backdrop { align-items: flex-end !important; }
   #modalFood .modal { border-radius: 0 !important; max-height: 100vh !important; height: 100vh; }
   #foodCatTabs { width: 72px !important; }
+
+  /* Today food table: hide kcal & time columns, shrink food select */
+  #todayFoodTable { table-layout: fixed; width: 100%; }
+  #todayFoodTable td:nth-child(4),   /* kcal */
+  #todayFoodTable td:nth-child(5),   /* time */
+  #todayFoodTable th:nth-child(4),
+  #todayFoodTable th:nth-child(5) { display: none !important; }
+  #todayFoodTable td:nth-child(1) { width: 55% !important; }
+  #todayFoodTable td:nth-child(2) { width: 18% !important; }  /* cat tag */
+  #todayFoodTable td:nth-child(3) { width: 18% !important; }  /* grams */
+  #todayFoodTable td:nth-child(6) { width: 9% !important; }   /* delete */
+  #todayFoodTable select { font-size: 12px !important; padding: 2px 2px !important; }
+  #todayFoodTable input[type="number"] { width: 48px !important; font-size: 12px !important; }
 }
 </style>
 </head>
