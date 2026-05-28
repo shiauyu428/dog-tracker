@@ -207,6 +207,7 @@ input[type=date]{font-family:'DM Mono',monospace;}
    MOBILE RESPONSIVE (< 768px)
    ============================================================ */
 @media (max-width: 767px) {
+  #mobDogBar { display: block !important; }
   .sidebar { display: none !important; }
   .main { margin-left: 0 !important; padding-bottom: 68px; }
   body, .app, .main, .content, .page { overflow-x: hidden !important; max-width: 100vw; }
@@ -300,6 +301,14 @@ input[type=date]{font-family:'DM Mono',monospace;}
 
   <!-- ===== TODAY ===== -->
   <div id="page-today" class="page active">
+    <!-- Mobile dog indicator (hidden on desktop) -->
+    <div id="mobDogBar" style="display:none;padding:8px 14px;font-size:14px;font-weight:700;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:space-between">
+      <span id="mobDogName">🦖 暴龍</span>
+      <div style="display:flex;gap:6px">
+        <button id="mobBtnDog0" onclick="switchDog(0)" class="btn btn-sm btn-primary" style="font-size:12px;padding:4px 10px">🦖 暴龍</button>
+        <button id="mobBtnDog1" onclick="switchDog(1)" class="btn btn-sm" style="font-size:12px;padding:4px 10px">🐶 阿肥</button>
+      </div>
+    </div>
     <div class="topbar">
       <h1>今日紀錄</h1>
       <div class="topbar-actions">
@@ -1011,7 +1020,7 @@ input[type=date]{font-family:'DM Mono',monospace;}
       <button class="modal-close" onclick="closeModal('modalExportPreview')">×</button>
     </div>
     <div class="modal-body" style="flex:1;overflow-y:auto;padding:0">
-      <iframe id="etPreviewFrame" style="width:100%;height:500px;border:none"></iframe>
+      <iframe id="etPreviewFrame" style="width:100%;height:75vh;border:none"></iframe>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modalExportPreview')">關閉</button>
@@ -1453,6 +1462,11 @@ function switchDog(idx) {
   document.getElementById('btnDog1').className = 'dog-btn' + (idx===1?' active':'');
   document.getElementById('sidebarName').textContent = DOG_EMOJIS[idx]+' '+DOG_NAMES[idx];
   document.getElementById('toolbarInfo').textContent = `目前：${DOG_NAMES[idx]}的日誌`;
+  // Update mobile dog bar buttons
+  const btn0 = document.getElementById('mobBtnDog0');
+  const btn1 = document.getElementById('mobBtnDog1');
+  if (btn0) btn0.className = 'btn btn-sm' + (idx===0?' btn-primary':'');
+  if (btn1) btn1.className = 'btn btn-sm' + (idx===1?' btn-primary':'');
   const active = document.querySelector('.page.active')?.id?.replace('page-','');
   if (active) showPage(active);
 }
@@ -3780,7 +3794,9 @@ function buildTableHTML(data, inline=false) {
   const both = dogVal === 'both';
   const DOG_NAMES = {0:'🦖 暴龍', 1:'🐶 阿肥'};
 
-  // Group by time
+  // Group by time, then by category order within each time
+  const CAT_ORDER = ['乾糧','溼糧','鮮食','凍乾','零食/啃咬','保養品'];
+  const catRank = c => { const i = CAT_ORDER.indexOf(c); return i === -1 ? 99 : i; };
   const timeGroups = {};
   rows.forEach(f => {
     const t = f.time || '00:00';
@@ -3817,7 +3833,8 @@ function buildTableHTML(data, inline=false) {
 
   for (const [time, foods] of Object.entries(timeGroups).sort()) {
     html += `<tr class="time-hdr"><td colspan="${both?4:3}">⏰ ${time}</td></tr>`;
-    for (const [name, vals] of Object.entries(foods)) {
+    const sortedFoods = Object.entries(foods).sort((a,b) => catRank(a[1].cat) - catRank(b[1].cat));
+    for (const [name, vals] of sortedFoods) {
       if (both) {
         const r = vals[0] ? vals[0]+'g' : '<span class="dash">—</span>';
         const a = vals[1] ? vals[1]+'g' : '<span class="dash">—</span>';
