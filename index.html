@@ -934,6 +934,36 @@ input[type=date]{font-family:'DM Mono',monospace;}
         <div class="form-group"><label>嘔吐物外觀</label><input type="text" id="detVomitLook" placeholder="未消化食物、黃色泡沫、草..."></div>
         <div class="form-group"><label>便便狀</label><input type="text" id="detPoop" placeholder="正常、泥狀、未消化..."></div>
       </div>
+
+      <!-- Recent medicines alert -->
+      <div id="detMedAlert" style="display:none;background:var(--accent-l);border:1px solid #e8c88a;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px">
+        <div style="font-weight:600;color:var(--accent-d);margin-bottom:4px">💊 近14天預防藥／疫苗</div>
+        <div id="detMedAlertList" style="color:var(--text2);line-height:1.8"></div>
+      </div>
+
+      <!-- Parent schedule checkboxes -->
+      <div class="form-group" style="margin-bottom:10px">
+        <label>👨‍👩 爸媽行程</label>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="detParentDye" style="width:16px;height:16px;flex-shrink:0">
+            <span>媽媽染/燙頭髮（近期）</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="detParentMomOff" style="width:16px;height:16px;flex-shrink:0">
+            <span>媽媽休假</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="detParentWeekend" style="width:16px;height:16px;flex-shrink:0">
+            <span>週末</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="detParentDadFeed" style="width:16px;height:16px;flex-shrink:0">
+            <span>爸爸餵</span>
+          </label>
+        </div>
+      </div>
+
       <div class="form-group"><label>📋 24hr 重點行程</label><textarea id="det24hr" rows="2" placeholder="活動、外出地點、特殊事件..."></textarea></div>
       <div class="form-row">
         <div class="form-group"><label>商業飼料／濕食／凍乾</label><textarea id="detKibble" rows="2" placeholder="乾糧、罐頭、凍乾..."></textarea></div>
@@ -2169,6 +2199,11 @@ async function openDetective() {
   document.getElementById('detSpirit').value='';
   document.getElementById('detAppetite').value='';
 
+  // Clear parent checkboxes
+  ['detParentDye','detParentMomOff','detParentWeekend','detParentDadFeed'].forEach(id => {
+    document.getElementById(id).checked = false;
+  });
+
   const notice = document.getElementById('autofillNotice');
   if (notice) {
     notice.style.display = 'block';
@@ -2178,7 +2213,39 @@ async function openDetective() {
     notice.style.border = '1px solid #e8c88a';
   }
 
+  // Show recent medicines (14 days)
+  await showRecentMedAlert(date);
+
   openModal('modalDetective');
+}
+
+async function showRecentMedAlert(dateStr) {
+  const allMeds = await dbAll('medicines');
+  const myMeds = allMeds.filter(m => parseInt(m.dog) === currentDog);
+  const eventDate = new Date(dateStr + 'T00:00:00');
+  const lines = [];
+
+  for (const med of myMeds) {
+    const lastDate = med.lastDate || med.lastGiven; // support both field names
+    if (!lastDate) continue;
+    const givenDate = new Date(lastDate + 'T00:00:00');
+    const diffDays = Math.round((eventDate - givenDate) / 86400000);
+    if (diffDays >= 0 && diffDays <= 14) {
+      const isVaccine = med.name.includes('疫苗') || med.name.includes('vaccine');
+      const icon = isVaccine ? '💉' : '💊';
+      const dayStr = diffDays === 0 ? '今天' : diffDays === 1 ? '昨天' : `${diffDays}天前`;
+      lines.push(`${icon} ${dayStr}：${med.name}`);
+    }
+  }
+
+  const alertEl = document.getElementById('detMedAlert');
+  const listEl = document.getElementById('detMedAlertList');
+  if (lines.length > 0) {
+    listEl.innerHTML = lines.join('<br>');
+    alertEl.style.display = 'block';
+  } else {
+    alertEl.style.display = 'none';
+  }
 }
 
 async function autofill24hr(date, timeStr) {
@@ -2315,6 +2382,23 @@ async function saveDetective() {
   let type = document.getElementById('detType').value;
   if (type==='custom') type = document.getElementById('detCustomType').value.trim()||'其他';
   const editId = document.getElementById('editHealthId').value;
+
+  // Append parent schedule to 24hr notes
+  const parentLabels = {
+    detParentDye: '媽媽染/燙頭髮（近期）',
+    detParentMomOff: '媽媽休假',
+    detParentWeekend: '週末',
+    detParentDadFeed: '爸爸餵',
+  };
+  const parentNotes = Object.entries(parentLabels)
+    .filter(([id]) => document.getElementById(id)?.checked)
+    .map(([, label]) => label);
+  let activity24hr = document.getElementById('det24hr').value;
+  if (parentNotes.length > 0) {
+    const parentStr = '👨‍👩 ' + parentNotes.join('、');
+    activity24hr = activity24hr ? activity24hr + '\n' + parentStr : parentStr;
+  }
+
   const data = {
     dog: currentDog,
     date: document.getElementById('detDate').value,
@@ -2323,7 +2407,7 @@ async function saveDetective() {
     note: document.getElementById('detVomitLook').value,
     vomitLook: document.getElementById('detVomitLook').value,
     poop: document.getElementById('detPoop').value,
-    activity24hr: document.getElementById('det24hr').value,
+    activity24hr,
     kibble: document.getElementById('detKibble').value,
     fresh: document.getElementById('detFresh').value,
     snack: document.getElementById('detSnack').value,
@@ -4028,7 +4112,7 @@ Object.assign(window, {
   openAddFood, addFoodRow, saveFoodEntries, renderFoodLog, toggleManualRow,
   renderFoodPicker, pickFood, calcPickedRow,
   saveWalk, renderWalkLog,
-  toggleCustomHealth, openDetective, saveDetective, saveHealthSimple, editHealthEvent, renderHealthLog,
+  toggleCustomHealth, openDetective, saveDetective, saveHealthSimple, editHealthEvent, renderHealthLog, showRecentMedAlert,
   openAddMed, saveMed, editMed, delMed, openGiveMed, confirmGiveMed, renderMedicineList,
   renderCharts, initChartDates,
   openAddTemplate, addTplRow, saveTemplate, editTemplate, applyTemplate, applyTemplateWithDate, delTemplate, toggleTpl, openTemplateApply, renderApplyTplList, getTplOptionsHTML,
