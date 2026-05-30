@@ -2373,9 +2373,11 @@ async function refetchAutofill() {
   const date = document.getElementById('detDate').value;
   const time = document.getElementById('detTime').value;
   if (!date) return;
-  // clear auto-filled fields before re-fetching
+  // Only clear auto-filled food/activity fields, NOT checkboxes
   ['det24hr','detKibble','detFresh','detSnack','detSupp'].forEach(id => document.getElementById(id).value='');
   await autofill24hr(date, time);
+  // Also refresh medicine alert
+  await showRecentMedAlert(date);
 }
 
 async function saveDetective() {
