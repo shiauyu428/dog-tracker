@@ -2443,7 +2443,6 @@ async function editHealthEvent(id) {
   document.getElementById('editHealthId').value = h.id;
   document.getElementById('detDate').value = h.date || '';
   document.getElementById('detTime').value = h.time || '';
-  // type
   const typeOpts = ['嘔吐','腹瀉','食慾不振','皮膚問題','眼睛/耳朵異常'];
   if (typeOpts.includes(h.type)) {
     document.getElementById('detType').value = h.type;
@@ -2465,8 +2464,20 @@ async function editHealthEvent(id) {
   document.getElementById('detPlan').value = h.plan || '';
   document.getElementById('detSpirit').value = h.spirit || '';
   document.getElementById('detAppetite').value = h.appetite || '';
+
+  // Restore parent checkboxes from saved activity24hr text
+  const activity = h.activity24hr || '';
+  document.getElementById('detParentDye').checked = activity.includes('媽媽染/燙頭髮');
+  document.getElementById('detParentMomOff').checked = activity.includes('媽媽休假');
+  document.getElementById('detParentWeekend').checked = activity.includes('週末');
+  document.getElementById('detParentDadFeed').checked = activity.includes('爸爸餵');
+
   const notice = document.getElementById('autofillNotice');
   if (notice) notice.style.display = 'none';
+
+  // Show med alert based on event date
+  if (h.date) await showRecentMedAlert(h.date);
+
   openModal('modalDetective');
 }
 
