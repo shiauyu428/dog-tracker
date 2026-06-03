@@ -1641,16 +1641,25 @@ async function renderToday() {
       optionsHTML += '</optgroup>';
     });
 
-    // Pre-build return food cache for this render
+    // Pre-build caches for this render
     const lastEatenCache = await buildLastEatenCache();
+    const firstEatenCache = await buildFirstEatenCache();
+    const now = new Date(); now.setHours(0,0,0,0);
+
     const getBadge = (f, matched) => {
       if (!matched) return '';
-      if (isNewFood(matched)) return `<span style="font-size:10px;background:#deeaf8;color:#0c447c;border-radius:99px;padding:1px 6px;margin-left:4px;font-weight:500">🆕 新</span>`;
-      // check return food: last eaten 30+ days ago
+      // 🆕: this dog's first time eating this food was within 5 days
+      const firstDate = firstEatenCache[`${currentDog}_${f.food}`];
+      if (firstDate) {
+        const first = new Date(firstDate + 'T00:00:00');
+        if ((now - first) / 86400000 <= 5) {
+          return `<span style="font-size:10px;background:#deeaf8;color:#0c447c;border-radius:99px;padding:1px 6px;margin-left:4px;font-weight:500">🆕 新</span>`;
+        }
+      }
+      // 🔄: last eaten 30+ days ago
       const lastDate = lastEatenCache[`${currentDog}_${f.food}`];
       if (lastDate) {
         const last = new Date(lastDate+'T00:00:00');
-        const now = new Date(); now.setHours(0,0,0,0);
         if ((now-last)/86400000 >= 30) return `<span style="font-size:10px;background:#f5ead8;color:#8a5a2a;border-radius:99px;padding:1px 6px;margin-left:4px;font-weight:500">🔄 久違</span>`;
       }
       return '';
@@ -1879,7 +1888,7 @@ async function getFoods() {
   if (!_foodCache) _foodCache = await dbAll('food_db');
   return _foodCache;
 }
-function invalidateFoodCache() { _foodCache = null; _lastEatenCache = null; }
+function invalidateFoodCache() { _foodCache = null; _lastEatenCache = null; _firstEatenCache = null; }
 
 async function loadFoodOptions(selId) {
   const foods = await getFoods();
@@ -1964,7 +1973,7 @@ async function saveFoodEntries() {
     saved++;
   }
   closeModal('modalFood');
-  if (saved > 0) { _lastEatenCache = null; renderToday(); }
+  if (saved > 0) { _lastEatenCache = null; _firstEatenCache = null; renderToday(); }
 }
 
 async function renderFoodLog() {
@@ -1974,20 +1983,24 @@ async function renderFoodLog() {
   logs.sort((a,b) => b.date.localeCompare(a.date)||(b.id-a.id));
   const foodMap = await getFoodDbMap();
   const lastEatenCache = await buildLastEatenCache();
+  const firstEatenCache = await buildFirstEatenCache();
+  const nowFL = new Date(); nowFL.setHours(0,0,0,0);
   const tbody = document.getElementById('foodLogTable');
   tbody.innerHTML = logs.length === 0
     ? '<tr><td colspan="7"><div class="empty"><div class="empty-icon">🍽</div>尚無紀錄</div></td></tr>'
     : logs.map(f => {
         const dbF = foodMap[f.food];
         let badge = '';
-        if (dbF && isNewFood(dbF)) {
-          badge = ' <span style="font-size:10px;background:#deeaf8;color:#0c447c;border-radius:99px;padding:1px 6px;font-weight:500">🆕</span>';
-        } else if (dbF) {
-          const lastDate = lastEatenCache[`${currentDog}_${f.food}`];
-          if (lastDate) {
-            const last = new Date(lastDate+'T00:00:00');
-            const now = new Date(); now.setHours(0,0,0,0);
-            if ((now-last)/86400000 >= 30) badge = ' <span style="font-size:10px;background:#f5ead8;color:#8a5a2a;border-radius:99px;padding:1px 6px;font-weight:500">🔄</span>';
+        if (dbF) {
+          const firstDate = firstEatenCache[`${currentDog}_${f.food}`];
+          if (firstDate && (nowFL - new Date(firstDate+'T00:00:00'))/86400000 <= 5) {
+            badge = ' <span style="font-size:10px;background:#deeaf8;color:#0c447c;border-radius:99px;padding:1px 6px;font-weight:500">🆕</span>';
+          } else {
+            const lastDate = lastEatenCache[`${currentDog}_${f.food}`];
+            if (lastDate) {
+              const last = new Date(lastDate+'T00:00:00');
+              if ((nowFL-last)/86400000 >= 30) badge = ' <span style="font-size:10px;background:#f5ead8;color:#8a5a2a;border-radius:99px;padding:1px 6px;font-weight:500">🔄</span>';
+            }
           }
         }
         return `<tr><td style="font-family:'DM Mono',monospace;font-size:11px">${fmtDateFull(f.date)}</td><td>${f.food}${badge}</td><td><span class="tag tag-blue" style="font-size:10px">${f.cat||''}</span></td><td>${f.grams}g</td><td>${Math.round(f.kcal)} kcal</td><td style="color:var(--text3);font-size:12px">${f.note||''}</td><td><button class="btn btn-danger btn-sm" onclick="delEntry('food_log',${f.id})">刪除</button></td></tr>`;
@@ -2294,15 +2307,17 @@ async function autofill24hr(date, timeStr) {
   const getCat = f => (f.cat||'').trim();
   const foodMap = await getFoodDbMap();
   const lastEatenCache = await buildLastEatenCache();
+  const firstEatenCache = await buildFirstEatenCache();
+  const nowFmt = new Date(); nowFmt.setHours(0,0,0,0);
   const fmt = (items) => [...new Set(items.map(f => {
     const dbF = foodMap[f.food];
-    if (dbF && isNewFood(dbF)) return '🆕 ' + f.food;
     if (dbF) {
+      const firstDate = firstEatenCache[`${currentDog}_${f.food}`];
+      if (firstDate && (nowFmt - new Date(firstDate+'T00:00:00'))/86400000 <= 5) return '🆕 ' + f.food;
       const lastDate = lastEatenCache[`${currentDog}_${f.food}`];
       if (lastDate) {
         const last = new Date(lastDate+'T00:00:00');
-        const now = new Date(); now.setHours(0,0,0,0);
-        if ((now-last)/86400000 >= 30) return '🔄 ' + f.food;
+        if ((nowFmt-last)/86400000 >= 30) return '🔄 ' + f.food;
       }
     }
     return f.food;
@@ -3240,6 +3255,20 @@ function openAddFoodDb() {
 }
 
 // Returns true if food was added to DB within the last N days
+// Cache: { dogIdx_foodName: firstDateStr }
+let _firstEatenCache = null;
+async function buildFirstEatenCache() {
+  if (_firstEatenCache) return _firstEatenCache;
+  const allFood = await dbAll('food_log');
+  const cache = {};
+  allFood.forEach(f => {
+    const key = `${f.dog}_${f.food}`;
+    if (!cache[key] || f.date < cache[key]) cache[key] = f.date;
+  });
+  _firstEatenCache = cache;
+  return cache;
+}
+
 function isNewFood(food, days=5) {
   if (!food?.addedDate) return false;
   const added = new Date(food.addedDate + 'T00:00:00');
