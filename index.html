@@ -296,7 +296,7 @@ input[type=date]{font-family:'DM Mono',monospace;}
   <div class="toolbar">
     <span id="toolbarInfo">資料存於瀏覽器本地，記得定期匯出 JSON 備份到 iCloud</span>
     <span id="syncStatus" style="font-size:12px;color:var(--text2)"></span>
-    <button class="btn btn-sm" id="btnGdriveSync" onclick="gdriveSignIn()" style="display:none">☁️ 連結 Google Drive</button>
+    <button class="btn btn-sm" id="btnGdriveSync" onclick="gdriveSignIn()">☁️ 連結 Google Drive</button>
     <button class="btn btn-sm" id="btnGdriveSignout" onclick="gdriveSignOut()" style="display:none;background:var(--surface2)">☁️ 已連結 ✕</button>
     <button class="btn btn-sm" id="btnExportData">⬇ 匯出 JSON</button>
     <button class="btn btn-sm" id="btnImportTrigger">⬆ 匯入 JSON</button>
@@ -4148,9 +4148,12 @@ async function init() {
   document.getElementById('sidebarName').textContent = DOG_EMOJIS[0] + ' ' + name0;
 
   renderToday();
-  // Init Google Drive sync after app is ready
-  if (typeof google !== 'undefined') gdriveInit();
-  else window.addEventListener('load', () => { if (typeof google !== 'undefined') gdriveInit(); });
+  // Init Google Drive sync — wait for GSI script to load
+  function tryGdriveInit(attempt) {
+    if (typeof google !== 'undefined' && google.accounts) { gdriveInit(); return; }
+    if (attempt < 20) setTimeout(() => tryGdriveInit(attempt + 1), 300);
+  }
+  tryGdriveInit(0);
 }
 
 // ============================================================
