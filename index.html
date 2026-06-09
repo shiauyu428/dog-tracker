@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>狗狗健康日誌 v2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
 :root {
@@ -294,6 +295,9 @@ input[type=date]{font-family:'DM Mono',monospace;}
 
   <div class="toolbar">
     <span id="toolbarInfo">資料存於瀏覽器本地，記得定期匯出 JSON 備份到 iCloud</span>
+    <span id="syncStatus" style="font-size:12px;color:var(--text2)"></span>
+    <button class="btn btn-sm" id="btnGdriveSync" onclick="gdriveSignIn()">☁️ 連結 Google Drive</button>
+    <button class="btn btn-sm" id="btnGdriveSignout" onclick="gdriveSignOut()" style="display:none;background:var(--surface2)">☁️ 已連結 ✕</button>
     <button class="btn btn-sm" id="btnExportData">⬇ 匯出 JSON</button>
     <button class="btn btn-sm" id="btnImportTrigger">⬆ 匯入 JSON</button>
     <input type="file" id="importFile" accept=".json" style="display:none">
@@ -4144,10 +4148,210 @@ async function init() {
   document.getElementById('sidebarName').textContent = DOG_EMOJIS[0] + ' ' + name0;
 
   renderToday();
+  // Init Google Drive sync — wait for GSI script to load
+  function tryGdriveInit(attempt) {
+    if (typeof google !== 'undefined' && google.accounts) { gdriveInit(); return; }
+    if (attempt < 20) setTimeout(() => tryGdriveInit(attempt + 1), 300);
+  }
+  tryGdriveInit(0);
 }
+
+// ============================================================
+// GOOGLE DRIVE SYNC
+// ============================================================
+// 填入你的 Google OAuth Client ID（在 Google Cloud Console 建立）
+const GDRIVE_CLIENT_ID = '675940238157-1ee8koo7r6tb6qirnp47e47alcuig3ml.apps.googleusercontent.com';
+const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const GDRIVE_FILE_NAME = 'dogtracker_sync.json';
+
+let gdriveToken = null;
+let gdriveSyncTimer = null;
+let gdriveFileId = null;
+
+function setSyncStatus(msg, color) {
+  const el = document.getElementById('syncStatus');
+  if (el) { el.textContent = msg; el.style.color = color || 'var(--text2)'; }
+}
+
+async function gdriveInit() {
+  // Try to silently restore token from sessionStorage
+  const saved = sessionStorage.getItem('gdrive_token');
+  if (saved) {
+    const t = JSON.parse(saved);
+    if (t.expires_at > Date.now() + 60000) {
+      gdriveToken = t;
+      await gdriveOnSignedIn();
+      return;
+    }
+  }
+  // Show connect button if Client ID is configured
+  if (GDRIVE_CLIENT_ID && !GDRIVE_CLIENT_ID.startsWith('YOUR_')) {
+    document.getElementById('btnGdriveSync').style.display = '';
+  }
+}
+
+function gdriveLoadScript() {
+  return new Promise((resolve, reject) => {
+    if (typeof google !== 'undefined' && google.accounts) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('無法載入 Google 登入元件'));
+    document.head.appendChild(s);
+  });
+}
+
+async function gdriveSignIn() {
+  setSyncStatus('載入中...', 'var(--accent)');
+  try { await gdriveLoadScript(); } catch(e) { alert(e.message); setSyncStatus('', ''); return; }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GDRIVE_CLIENT_ID,
+    scope: GDRIVE_SCOPE,
+    callback: async (resp) => {
+      if (resp.error) { setSyncStatus('登入失敗：' + resp.error, 'var(--red)'); return; }
+      gdriveToken = { access_token: resp.access_token, expires_at: Date.now() + resp.expires_in * 1000 };
+      sessionStorage.setItem('gdrive_token', JSON.stringify(gdriveToken));
+      await gdriveOnSignedIn();
+    },
+  });
+  client.requestAccessToken();
+}
+
+function gdriveSignOut() {
+  if (gdriveToken) google.accounts.oauth2.revoke(gdriveToken.access_token, ()=>{});
+  gdriveToken = null;
+  gdriveFileId = null;
+  sessionStorage.removeItem('gdrive_token');
+  document.getElementById('btnGdriveSync').style.display = '';
+  document.getElementById('btnGdriveSignout').style.display = 'none';
+  setSyncStatus('已中斷 Google Drive 連結', 'var(--text2)');
+  document.getElementById('toolbarInfo').textContent = '資料存於瀏覽器本地，記得定期匯出 JSON 備份到 iCloud';
+}
+
+async function gdriveOnSignedIn() {
+  document.getElementById('btnGdriveSync').style.display = 'none';
+  document.getElementById('btnGdriveSignout').style.display = '';
+  document.getElementById('toolbarInfo').textContent = '已連結 Google Drive，資料自動同步';
+  setSyncStatus('☁️ 同步中...', 'var(--accent)');
+  await gdrivePull();
+}
+
+async function gdriveFetch(url, opts = {}) {
+  opts.headers = { ...opts.headers, Authorization: `Bearer ${gdriveToken.access_token}` };
+  const r = await fetch(url, opts);
+  if (r.status === 401) { gdriveSignOut(); throw new Error('token expired'); }
+  return r;
+}
+
+async function gdriveFindFile() {
+  if (gdriveFileId) return gdriveFileId;
+  const r = await gdriveFetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime)&q=name%3D%22' + GDRIVE_FILE_NAME + '%22');
+  const data = await r.json();
+  gdriveFileId = data.files?.[0]?.id || null;
+  return gdriveFileId;
+}
+
+async function gdrivePull() {
+  try {
+    const fileId = await gdriveFindFile();
+    if (!fileId) {
+      // No cloud file yet — push local data up
+      setSyncStatus('首次連結，上傳本地資料...', 'var(--accent)');
+      await gdrivePush();
+      return;
+    }
+    // Get cloud file modified time
+    const metaR = await gdriveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`);
+    const meta = await metaR.json();
+    const cloudTime = new Date(meta.modifiedTime).getTime();
+    const localTime = parseInt(localStorage.getItem('gdrive_last_push') || '0');
+
+    if (cloudTime > localTime + 5000) {
+      // Cloud is newer — download and import
+      setSyncStatus('下載雲端資料...', 'var(--accent)');
+      const dlR = await gdriveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+      const data = await dlR.json();
+      await gdriveApplyData(data);
+      localStorage.setItem('gdrive_last_push', cloudTime.toString());
+      setSyncStatus(`✓ 已從雲端同步 ${new Date(cloudTime).toLocaleTimeString('zh-TW')}`, 'var(--green)');
+      location.reload();
+    } else {
+      setSyncStatus('✓ 資料已是最新', 'var(--green)');
+      setTimeout(() => setSyncStatus('☁️ 自動同步已啟用', 'var(--text2)'), 2000);
+    }
+  } catch(e) {
+    setSyncStatus('同步失敗：' + e.message, 'var(--red)');
+  }
+}
+
+async function gdriveApplyData(data) {
+  for (const store of ['food_log','walk_log','health_log','medicines','food_db','templates','activity_log','trip_log','vege_log','health_record']) {
+    await new Promise(r => { const tx=db.transaction(store,'readwrite'); tx.objectStore(store).clear().onsuccess=r; });
+    if (data[store]) for (const item of data[store]) await dbAdd(store, item);
+  }
+  if (data.settings) for (const [k,v] of Object.entries(data.settings)) if(v!==null) await setSetting(k,v);
+}
+
+async function gdrivePush() {
+  if (!gdriveToken) return;
+  try {
+    setSyncStatus('☁️ 儲存中...', 'var(--accent)');
+    const [fl,wl,hl,meds,foodDb,tpls,acts,trips,veges,hrecs] = await Promise.all([
+      dbAll('food_log'),dbAll('walk_log'),dbAll('health_log'),dbAll('medicines'),
+      dbAll('food_db'),dbAll('templates'),dbAll('activity_log'),dbAll('trip_log'),
+      dbAll('vege_log'),dbAll('health_record')
+    ]);
+    const settings = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith('dgt_')) {
+        const shortKey = k.slice(4);
+        try { settings[shortKey] = JSON.parse(localStorage.getItem(k)); } catch { settings[shortKey] = localStorage.getItem(k); }
+      }
+    }
+    const payload = JSON.stringify({version:4,exportedAt:new Date().toISOString(),food_log:fl,walk_log:wl,health_log:hl,medicines:meds,food_db:foodDb,templates:tpls,activity_log:acts,trip_log:trips,vege_log:veges,health_record:hrecs,settings});
+
+    const fileId = await gdriveFindFile();
+    let url, method;
+    if (fileId) {
+      url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`;
+      method = 'PATCH';
+    } else {
+      url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+      method = 'POST';
+    }
+    const meta = JSON.stringify({ name: GDRIVE_FILE_NAME, ...(fileId ? {} : { parents: ['appDataFolder'] }) });
+    const body = new FormData();
+    body.append('metadata', new Blob([meta], { type: 'application/json' }));
+    body.append('file', new Blob([payload], { type: 'application/json' }));
+
+    const r = await gdriveFetch(url, { method, body });
+    const result = await r.json();
+    if (!fileId) gdriveFileId = result.id;
+    const now = Date.now();
+    localStorage.setItem('gdrive_last_push', now.toString());
+    setSyncStatus(`✓ 已同步 ${new Date().toLocaleTimeString('zh-TW')}`, 'var(--green)');
+  } catch(e) {
+    setSyncStatus('同步失敗：' + e.message, 'var(--red)');
+  }
+}
+
+// Debounced push — called after every write
+function scheduleSync() {
+  if (!gdriveToken) return;
+  clearTimeout(gdriveSyncTimer);
+  gdriveSyncTimer = setTimeout(gdrivePush, 3000);
+}
+
+// Patch dbAdd/dbPut/dbDel to trigger sync
+const _origDbAdd = dbAdd, _origDbPut = dbPut, _origDbDel = dbDel;
+function dbAdd(store, data) { return _origDbAdd(store, data).then(r => { scheduleSync(); return r; }); }
+function dbPut(store, data) { return _origDbPut(store, data).then(r => { scheduleSync(); return r; }); }
+function dbDel(store, id)   { return _origDbDel(store, id).then(r => { scheduleSync(); return r; }); }
 
 init();
 
+// ============================================================
 // Expose functions to global scope (required for onclick handlers in module scripts)
 Object.assign(window, {
   switchDog, showPage, openModal, closeModal,
@@ -4170,6 +4374,7 @@ Object.assign(window, {
   initExportTable, previewExportTable, downloadExportTable, setEtDog,
   saveActivities, refetchAutofill,
   openTripModal, saveTrip, delTrip,
+  gdriveSignIn, gdriveSignOut,
 });
 </script>
 <!-- Mobile bottom tab bar -->
