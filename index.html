@@ -408,14 +408,14 @@ input[type=date]{font-family:'DM Mono',monospace;}
         <div class="sec-title">🐾 今日活動</div>
         <div class="card card-body">
           <!-- Walk row -->
-          <div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px">
             <span style="font-size:18px">🦮</span>
-            <span style="font-size:13px;font-weight:500;min-width:80px">散步</span>
+            <span style="font-size:13px;font-weight:500;min-width:60px">散步</span>
             <input type="number" id="walkInput" placeholder="km" step="0.1" min="0"
               style="width:72px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'Noto Sans TC',sans-serif">
             <span style="font-size:12px;color:var(--text3)">km</span>
             <input type="text" id="walkNote" placeholder="備註（選填）"
-              style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'Noto Sans TC',sans-serif">
+              style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'Noto Sans TC',sans-serif">
             <button class="btn btn-sm btn-primary" onclick="saveWalk()">儲存</button>
             <div id="walkMsg" style="color:var(--green);font-size:12px;display:none">✓</div>
           </div>
@@ -4174,15 +4174,18 @@ function setSyncStatus(msg, color) {
 }
 
 async function gdriveInit() {
-  // Try to silently restore token from sessionStorage
-  const saved = sessionStorage.getItem('gdrive_token');
+  // Try to silently restore token from localStorage
+  const saved = localStorage.getItem('gdrive_token');
   if (saved) {
-    const t = JSON.parse(saved);
-    if (t.expires_at > Date.now() + 60000) {
-      gdriveToken = t;
-      await gdriveOnSignedIn();
-      return;
-    }
+    try {
+      const t = JSON.parse(saved);
+      if (t.expires_at > Date.now() + 60000) {
+        gdriveToken = t;
+        await gdriveOnSignedIn();
+        return;
+      }
+    } catch {}
+    localStorage.removeItem('gdrive_token');
   }
   // Show connect button if Client ID is configured
   if (GDRIVE_CLIENT_ID && !GDRIVE_CLIENT_ID.startsWith('YOUR_')) {
@@ -4210,7 +4213,7 @@ async function gdriveSignIn() {
     callback: async (resp) => {
       if (resp.error) { setSyncStatus('登入失敗：' + resp.error, 'var(--red)'); return; }
       gdriveToken = { access_token: resp.access_token, expires_at: Date.now() + resp.expires_in * 1000 };
-      sessionStorage.setItem('gdrive_token', JSON.stringify(gdriveToken));
+      localStorage.setItem('gdrive_token', JSON.stringify(gdriveToken));
       await gdriveOnSignedIn();
     },
   });
@@ -4221,7 +4224,7 @@ function gdriveSignOut() {
   if (gdriveToken) google.accounts.oauth2.revoke(gdriveToken.access_token, ()=>{});
   gdriveToken = null;
   gdriveFileId = null;
-  sessionStorage.removeItem('gdrive_token');
+  localStorage.removeItem('gdrive_token');
   document.getElementById('btnGdriveSync').style.display = '';
   document.getElementById('btnGdriveSignout').style.display = 'none';
   setSyncStatus('已中斷 Google Drive 連結', 'var(--text2)');
