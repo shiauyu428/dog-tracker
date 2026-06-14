@@ -903,8 +903,14 @@ input[type=date]{font-family:'DM Mono',monospace;}
         <button class="btn" style="width:100%;margin-top:4px;font-size:12px" onclick="addFoodRow()">+ 手動新增一筆</button>
       </div>
     </div>
-    <div class="modal-footer" style="justify-content:space-between">
-      <button class="btn btn-green btn-sm" onclick="saveCurrentEntriesAsTemplate()">📋 存成模板</button>
+    <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <button class="btn btn-green btn-sm" onclick="saveCurrentEntriesAsTemplate()">📋 存成模板</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="foodBothDogs" style="width:15px;height:15px;cursor:pointer">
+          <span>同時新增到兩隻</span>
+        </label>
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="closeModal('modalFood')">取消</button>
         <button class="btn btn-primary" onclick="saveFoodEntries()">儲存</button>
@@ -1943,20 +1949,21 @@ function calcFoodRow(idx) {
 async function saveFoodEntries() {
   const date = document.getElementById('foodDate').value;
   const now = document.getElementById('foodTime').value || new Date().toTimeString().slice(0,5);
+  const bothDogs = document.getElementById('foodBothDogs')?.checked;
+  const dogsToSave = bothDogs ? [0, 1] : [currentDog];
   const rows = document.querySelectorAll('#foodEntries .food-row');
   let saved = 0;
+
+  // 先收集所有要存的項目
+  const entries = [];
   for (const row of rows) {
-    // New picker row (has dataset.foodId)
     if (row.dataset.foodId) {
       const grams = parseFloat(row.querySelector('input[type="number"]')?.value) || 0;
       if (!grams) continue;
       const kpg = parseFloat(row.dataset.kcalPerG) || 0;
-      const kcal = kpg * grams;
-      await dbAdd('food_log', {dog:currentDog, date, food:row.dataset.foodName, cat:row.dataset.cat||'', grams, kcal, kcal_per_g:kpg, time:now});
-      saved++;
+      entries.push({food:row.dataset.foodName, cat:row.dataset.cat||'', grams, kcal:kpg*grams, kcal_per_g:kpg});
       continue;
     }
-    // Manual input row (has fManualRow)
     const manualRow = row.querySelector('[id^="fManualRow"]');
     if (manualRow && manualRow.style.display !== 'none') {
       const name = manualRow.querySelector('input[type="text"]')?.value.trim();
@@ -1965,11 +1972,9 @@ async function saveFoodEntries() {
       const grams = parseFloat(numInputs[0]?.value) || 0;
       const kcal = parseFloat(numInputs[1]?.value) || 0;
       if (!name) continue;
-      await dbAdd('food_log', {dog:currentDog, date, food:name, cat, grams, kcal, kcal_per_g: grams>0?kcal/grams:0, time:now});
-      saved++;
+      entries.push({food:name, cat, grams, kcal, kcal_per_g: grams>0?kcal/grams:0});
       continue;
     }
-    // Legacy select row
     const sel = row.querySelector('select[id^="fSel"]');
     if (!sel?.value || sel.value === '__manual__') continue;
     const gramsEl = row.querySelector('input[type="number"]');
@@ -1977,9 +1982,17 @@ async function saveFoodEntries() {
     const foods = await getFoods();
     const food = foods.find(f=>f.id===parseInt(sel.value)); if (!food) continue;
     const grams = parseFloat(gramsEl.value);
-    await dbAdd('food_log', {dog:currentDog, date, food:food.name, cat:food.cat||'', grams, kcal:food.kcal_per_g*grams, kcal_per_g:food.kcal_per_g, time:now});
-    saved++;
+    entries.push({food:food.name, cat:food.cat||'', grams, kcal:food.kcal_per_g*grams, kcal_per_g:food.kcal_per_g});
   }
+
+  // 依選擇的狗分別儲存
+  for (const dog of dogsToSave) {
+    for (const entry of entries) {
+      await dbAdd('food_log', {...entry, dog, date, time:now});
+      saved++;
+    }
+  }
+
   closeModal('modalFood');
   if (saved > 0) { _lastEatenCache = null; _firstEatenCache = null; renderToday(); }
 }
