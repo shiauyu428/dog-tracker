@@ -861,6 +861,10 @@ input[type=date]{font-family:'DM Mono',monospace;}
         </select>
       </div>
       <div id="copyMealsPreview" style="font-size:12px;color:var(--text2);margin-top:8px;padding:10px;background:var(--surface2);border-radius:8px;display:none"></div>
+      <div id="copyMealsTimes" style="display:none;margin-top:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">調整餐別時間（選填，留空則沿用原本時間）</div>
+        <div id="copyMealsTimeRows" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modalCopyMeals')">取消</button>
@@ -3733,6 +3737,22 @@ function openCopyMeals() {
   openModal('modalCopyMeals');
 }
 
+const MEAL_SLOTS = [
+  { key: 'breakfast', label: '🌅 早餐',   from: '00:00', to: '11:59' },
+  { key: 'teatime',  label: '🍵 下午茶', from: '12:00', to: '18:29' },
+  { key: 'dinner',   label: '🍖 晚餐',   from: '18:30', to: '20:29' },
+  { key: 'supper',   label: '🌙 宵夜',   from: '20:30', to: '23:59' },
+];
+function getMealSlot(time) {
+  if (!time) return null;
+  const [h, m] = time.split(':').map(Number);
+  const mins = h * 60 + m;
+  if (mins < 12 * 60) return 'breakfast';
+  if (mins < 18 * 60 + 30) return 'teatime';
+  if (mins < 20 * 60 + 30) return 'dinner';
+  return 'supper';
+}
+
 async function updateCopyPreview() {
   const from = document.getElementById('copyFromDate').value;
   const dogVal = document.getElementById('copyDogSelect').value;
@@ -3743,24 +3763,50 @@ async function updateCopyPreview() {
   const items = allFood.filter(f => f.date === from && dogs.includes(parseInt(f.dog)));
 
   const preview = document.getElementById('copyMealsPreview');
+  const timesDiv = document.getElementById('copyMealsTimes');
+  const timeRows = document.getElementById('copyMealsTimeRows');
+
   if (items.length === 0) {
     preview.style.display = 'block';
     preview.textContent = '來源日期沒有餐點紀錄';
+    timesDiv.style.display = 'none';
     return;
   }
+
+  // 統計各餐別
+  const slotCounts = {};
+  const slotSample = {}; // 記錄每個餐別的代表時間
+  items.forEach(f => {
+    const slot = getMealSlot(f.time);
+    if (!slot) return;
+    slotCounts[slot] = (slotCounts[slot] || 0) + 1;
+    if (!slotSample[slot]) slotSample[slot] = f.time;
+  });
+
   const dogNames = {0:'🦖 暴龍', 1:'🐶 阿肥'};
   const byDog = {};
-  items.forEach(f => {
-    const d = parseInt(f.dog);
-    if (!byDog[d]) byDog[d] = [];
-    byDog[d].push(f);
-  });
+  items.forEach(f => { const d = parseInt(f.dog); if (!byDog[d]) byDog[d] = []; byDog[d].push(f); });
   let html = '';
   for (const [d, fs] of Object.entries(byDog)) {
     html += `<strong>${dogNames[d]}</strong>：共 ${fs.length} 筆，${Math.round(fs.reduce((s,f)=>s+(f.kcal||0),0))} kcal<br>`;
   }
   preview.style.display = 'block';
   preview.innerHTML = html;
+
+  // 顯示餐別時間調整欄
+  const presentSlots = MEAL_SLOTS.filter(s => slotCounts[s.key]);
+  if (presentSlots.length > 0) {
+    timeRows.innerHTML = presentSlots.map(s => `
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
+        <span style="min-width:80px">${s.label}</span>
+        <span style="color:var(--text3);font-size:11px">原本 ${slotSample[s.key] || ''}</span>
+        <input type="time" id="copyTime_${s.key}"
+          style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-left:auto">
+      </div>`).join('');
+    timesDiv.style.display = 'block';
+  } else {
+    timesDiv.style.display = 'none';
+  }
 }
 
 async function confirmCopyMeals() {
@@ -3777,10 +3823,19 @@ async function confirmCopyMeals() {
 
   if (items.length === 0) { alert('來源日期沒有餐點紀錄'); return; }
 
+  // 收集使用者設定的餐別新時間
+  const slotTimes = {};
+  MEAL_SLOTS.forEach(s => {
+    const el = document.getElementById('copyTime_' + s.key);
+    if (el && el.value) slotTimes[s.key] = el.value;
+  });
+
   const newIds = [];
   for (const item of items) {
     const {id, date, ...rest} = item;
-    const newId = await dbAdd('food_log', {...rest, date: to});
+    const slot = getMealSlot(item.time);
+    const newTime = (slot && slotTimes[slot]) ? slotTimes[slot] : item.time;
+    const newId = await dbAdd('food_log', {...rest, date: to, time: newTime});
     if (newId) newIds.push(newId);
   }
 
