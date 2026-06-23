@@ -4389,10 +4389,10 @@ async function gdrivePush() {
     const fileId = await gdriveFindFile();
     let url, method;
     if (fileId) {
-      url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`;
+      url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&fields=id,modifiedTime`;
       method = 'PATCH';
     } else {
-      url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+      url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime';
       method = 'POST';
     }
     const meta = JSON.stringify({ name: GDRIVE_FILE_NAME, ...(fileId ? {} : { parents: ['appDataFolder'] }) });
@@ -4403,9 +4403,10 @@ async function gdrivePush() {
     const r = await gdriveFetch(url, { method, body });
     const result = await r.json();
     if (!fileId) gdriveFileId = result.id;
-    const now = Date.now();
-    localStorage.setItem('gdrive_last_push', now.toString());
-    setSyncStatus(`✓ 已同步 ${new Date().toLocaleTimeString('zh-TW')}`, 'var(--green)');
+    // 用 Drive 回傳的實際修改時間，避免本地時鐘與雲端時間不一致
+    const serverTime = result.modifiedTime ? new Date(result.modifiedTime).getTime() : Date.now();
+    localStorage.setItem('gdrive_last_push', serverTime.toString());
+    setSyncStatus(`✓ 已同步 ${new Date(serverTime).toLocaleTimeString('zh-TW')}`, 'var(--green)');
   } catch(e) {
     setSyncStatus('同步失敗：' + e.message, 'var(--red)');
   }
