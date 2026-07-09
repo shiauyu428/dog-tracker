@@ -486,6 +486,13 @@ input[type=date]{font-family:'DM Mono',monospace;}
               <select id="healthSev"><option>輕微</option><option>中等</option><option>嚴重</option></select>
             </div>
           </div>
+          <div class="form-group">
+            <label>是哪隻</label>
+            <select id="healthDogOverride">
+              <option value="">目前選擇的狗</option>
+              <option value="-1">❓ 不確定哪隻</option>
+            </select>
+          </div>
           <div class="form-group" id="customHealthWrap" style="display:none">
             <label>自訂類型</label><input type="text" id="customHealthType" placeholder="輸入事件名稱">
           </div>
@@ -1241,10 +1248,10 @@ let db;
 
 async function initDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('DogTrackerV3', 3);
+    const req = indexedDB.open('DogTrackerV3', 4);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ['food_log','walk_log','health_log','medicines','food_db','templates','settings','activity_log','trip_log','vege_log','health_record'].forEach(s => {
+      ['food_log','walk_log','health_log','medicines','food_db','templates','settings','activity_log','trip_log','vege_log','health_record','medicine_log'].forEach(s => {
         if (!d.objectStoreNames.contains(s)) {
           d.createObjectStore(s, {keyPath:'id', autoIncrement:true});
         }
@@ -2521,13 +2528,16 @@ async function saveHealthSimple() {
   const date = document.getElementById('logDate').value || today();
   let type = document.getElementById('healthType').value;
   if (type==='其他（自由輸入）') type = document.getElementById('customHealthType').value.trim()||'其他';
-  await dbAdd('health_log', {dog:currentDog, date, type, severity:document.getElementById('healthSev').value, note:document.getElementById('healthNote').value});
+  const dogOverride = document.getElementById('healthDogOverride')?.value;
+  const dog = dogOverride === '-1' ? -1 : currentDog;
+  await dbAdd('health_log', {dog, date, type, severity:document.getElementById('healthSev').value, note:document.getElementById('healthNote').value});
   document.getElementById('healthNote').value='';
+  if (document.getElementById('healthDogOverride')) document.getElementById('healthDogOverride').value = '';
   renderToday();
 }
 
 async function renderHealthLog() {
-  let logs = (await dbAll('health_log')).filter(h => h.dog===currentDog);
+  let logs = (await dbAll('health_log')).filter(h => h.dog===currentDog || h.dog===-1);
   logs.sort((a,b)=>b.date.localeCompare(a.date));
   const sevTag = {'輕微':'tag-blue','中等':'tag-amber','嚴重':'tag-red'};
   const tbody = document.getElementById('healthLogTable');
@@ -2540,9 +2550,10 @@ async function renderHealthLog() {
         const descCell = isNote
           ? `<span style="color:var(--text2)">${h.note||''}</span>`
           : `${[h.vomitLook ? `嘔吐：${h.vomitLook}` : (h.note && !h.vomitLook ? h.note : ''), h.poop ? `便便：${h.poop}` : ''].filter(Boolean).join('<br>') || '-'}`;
+        const unknownDog = h.dog === -1 ? '<span style="font-size:10px;background:var(--surface2);color:var(--text3);border-radius:8px;padding:1px 6px;margin-left:4px">❓不確定</span>' : '';
         return `<tr style="${rowStyle}">
           <td style="font-family:'DM Mono',monospace;font-size:11px">${fmtDateFull(h.date)} ${h.time||''}</td>
-          <td>${typeCell}</td>
+          <td>${typeCell}${unknownDog}</td>
           <td>${isNote ? '' : `<span class="tag ${sevTag[h.severity]||'tag-blue'}">${h.severity||''}</span>`}</td>
           <td style="font-size:12px;color:var(--text2)">${descCell}</td>
           <td style="font-size:12px;color:var(--text2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${h.activity24hr||''}">${isNote ? '' : (h.activity24hr||'-')}</td>
@@ -2629,6 +2640,7 @@ async function saveMed() {
 }
 async function renderMedicineList() {
   const meds = (await dbAll('medicines')).filter(m => m.dog===currentDog);
+  const allLogs = (await dbAll('medicine_log')).filter(l => l.dog===currentDog);
   const container = document.getElementById('medList');
   if (!meds.length) { container.innerHTML=`<div class="empty"><div class="empty-icon">💊</div>尚未設定預防藥<br><button class="btn btn-primary" style="margin-top:12px" onclick="openAddMed()">+ 新增藥物</button></div>`; return; }
 
@@ -2649,13 +2661,26 @@ async function renderMedicineList() {
     else if(diff<=5){cls='soon';tagCls='tag-amber';label=`還有 ${diff} 天`;}
     else{label=`還有 ${diff} 天`;}
 
+    // 歷史紀錄（最新到最舊）
+    const logs = allLogs.filter(l => l.medId===m.id).sort((a,b) => b.date.localeCompare(a.date));
+    const histHtml = logs.length ? `
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px">📋 投藥紀錄</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${logs.map(l=>`<span style="font-size:11px;background:var(--surface2);padding:2px 7px;border-radius:10px;color:var(--text2)">${fmtDateFull(l.date)}</span>`).join('')}
+        </div>
+      </div>` : '';
+
     return `<div class="med-card ${cls}" style="margin-bottom:10px">
-      <div><strong style="font-size:14px">${m.name}</strong>${m.note?`<span style="font-size:11px;color:var(--text3);margin-left:6px">${m.note}</span>`:''}
-      <div style="font-size:12px;color:var(--text2);margin-top:3px">
-        上次: ${fmtDateFull(m.lastDate)}
-        ${isOnDemand ? ' 　 按需投藥' : ` 　 下次: ${fmtDateFull(next)} 　 週期: ${cycle}天`}
-      </div></div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+      <div style="flex:1">
+        <strong style="font-size:14px">${m.name}</strong>${m.note?`<span style="font-size:11px;color:var(--text3);margin-left:6px">${m.note}</span>`:''}
+        <div style="font-size:12px;color:var(--text2);margin-top:3px">
+          上次: ${fmtDateFull(m.lastDate)}
+          ${isOnDemand ? ' 　 按需投藥' : ` 　 下次: ${fmtDateFull(next)} 　 週期: ${cycle}天`}
+        </div>
+        ${histHtml}
+      </div>
+      <div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end;margin-left:8px">
         <span class="tag ${tagCls}">${label}</span>
         <button class="btn btn-sm btn-primary" onclick="openGiveMed(${m.id},'${m.name}')">記錄投藥</button>
         <button class="btn btn-sm" onclick="editMed(${m.id})">編輯</button>
@@ -2716,6 +2741,8 @@ async function confirmGiveMed() {
   const date=document.getElementById('giveMedDate').value;
   const meds=await dbAll('medicines'); const m=meds.find(x=>x.id===id); if(!m) return;
   m.lastDate=date; await dbPut('medicines',m);
+  // 寫入歷史紀錄
+  await dbAdd('medicine_log', {dog:m.dog, medId:id, medName:m.name, date});
   closeModal('modalGiveMed'); renderMedicineList(); renderMedAlerts();
 }
 
@@ -4078,7 +4105,7 @@ async function downloadExportTable() {
 // EXPORT / IMPORT
 // ============================================================
 async function exportData() {
-  const [fl,wl,hl,meds,foodDb,tpls,acts,trips,veges,hrecs]=await Promise.all([dbAll('food_log'),dbAll('walk_log'),dbAll('health_log'),dbAll('medicines'),dbAll('food_db'),dbAll('templates'),dbAll('activity_log'),dbAll('trip_log'),dbAll('vege_log'),dbAll('health_record')]);
+  const [fl,wl,hl,meds,foodDb,tpls,acts,trips,veges,hrecs,medLog]=await Promise.all([dbAll('food_log'),dbAll('walk_log'),dbAll('health_log'),dbAll('medicines'),dbAll('food_db'),dbAll('templates'),dbAll('activity_log'),dbAll('trip_log'),dbAll('vege_log'),dbAll('health_record'),dbAll('medicine_log')]);
   // Export all localStorage settings (prefixed with dgt_)
   const settings = {};
   for (let i = 0; i < localStorage.length; i++) {
@@ -4088,7 +4115,7 @@ async function exportData() {
       try { settings[shortKey] = JSON.parse(localStorage.getItem(k)); } catch { settings[shortKey] = localStorage.getItem(k); }
     }
   }
-  const json = JSON.stringify({version:4,exportedAt:new Date().toISOString(),food_log:fl,walk_log:wl,health_log:hl,medicines:meds,food_db:foodDb,templates:tpls,activity_log:acts,trip_log:trips,vege_log:veges,health_record:hrecs,settings},null,2);
+  const json = JSON.stringify({version:4,exportedAt:new Date().toISOString(),food_log:fl,walk_log:wl,health_log:hl,medicines:meds,food_db:foodDb,templates:tpls,activity_log:acts,trip_log:trips,vege_log:veges,health_record:hrecs,medicine_log:medLog,settings},null,2);
   const filename = `dogtracker_${today()}.json`;
 
   // Try File System Access API (allows choosing save location)
@@ -4137,7 +4164,7 @@ async function importData(e) {
   const file=e.target.files[0]; if(!file) return;
   let data; try{data=JSON.parse(await file.text());}catch{alert('JSON格式錯誤');return;}
   if(!confirm('匯入會覆蓋現有資料，確定繼續？')) return;
-  for (const store of ['food_log','walk_log','health_log','medicines','food_db','templates','activity_log','trip_log','vege_log','health_record']) {
+  for (const store of ['food_log','walk_log','health_log','medicines','food_db','templates','activity_log','trip_log','vege_log','health_record','medicine_log']) {
     await new Promise(r => { const tx=db.transaction(store,'readwrite'); tx.objectStore(store).clear().onsuccess=r; });
     if (data[store]) for (const item of data[store]) await dbAdd(store, item);
   }
@@ -4357,7 +4384,7 @@ async function gdrivePull() {
 async function gdriveApplyData(data) {
   gdriveImporting = true;
   try {
-    for (const store of ['food_log','walk_log','health_log','medicines','food_db','templates','activity_log','trip_log','vege_log','health_record']) {
+    for (const store of ['food_log','walk_log','health_log','medicines','food_db','templates','activity_log','trip_log','vege_log','health_record','medicine_log']) {
       await new Promise(r => { const tx=db.transaction(store,'readwrite'); tx.objectStore(store).clear().onsuccess=r; });
       if (data[store]) for (const item of data[store]) await dbAdd(store, item);
     }
@@ -4371,10 +4398,10 @@ async function gdrivePush() {
   if (!gdriveToken) return;
   try {
     setSyncStatus('☁️ 儲存中...', 'var(--accent)');
-    const [fl,wl,hl,meds,foodDb,tpls,acts,trips,veges,hrecs] = await Promise.all([
+    const [fl,wl,hl,meds,foodDb,tpls,acts,trips,veges,hrecs,medLog] = await Promise.all([
       dbAll('food_log'),dbAll('walk_log'),dbAll('health_log'),dbAll('medicines'),
       dbAll('food_db'),dbAll('templates'),dbAll('activity_log'),dbAll('trip_log'),
-      dbAll('vege_log'),dbAll('health_record')
+      dbAll('vege_log'),dbAll('health_record'),dbAll('medicine_log')
     ]);
     const settings = {};
     for (let i = 0; i < localStorage.length; i++) {
@@ -4384,7 +4411,7 @@ async function gdrivePush() {
         try { settings[shortKey] = JSON.parse(localStorage.getItem(k)); } catch { settings[shortKey] = localStorage.getItem(k); }
       }
     }
-    const payload = JSON.stringify({version:4,exportedAt:new Date().toISOString(),food_log:fl,walk_log:wl,health_log:hl,medicines:meds,food_db:foodDb,templates:tpls,activity_log:acts,trip_log:trips,vege_log:veges,health_record:hrecs,settings});
+    const payload = JSON.stringify({version:4,exportedAt:new Date().toISOString(),food_log:fl,walk_log:wl,health_log:hl,medicines:meds,food_db:foodDb,templates:tpls,activity_log:acts,trip_log:trips,vege_log:veges,health_record:hrecs,medicine_log:medLog,settings});
 
     const fileId = await gdriveFindFile();
     let url, method;
