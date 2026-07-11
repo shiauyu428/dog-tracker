@@ -316,8 +316,10 @@ input[type=date]{font-family:'DM Mono',monospace;}
     <div class="topbar">
       <h1>今日紀錄</h1>
       <div class="topbar-actions">
+        <button class="btn btn-sm" onclick="shiftDate(-1)">‹ 昨天</button>
         <input type="date" id="logDate" class="btn" style="font-family:'DM Mono',monospace">
         <button class="btn btn-sm" id="btnGoToday">今天</button>
+        <button class="btn btn-sm" onclick="shiftDate(1)">明天 ›</button>
         <button class="btn btn-green btn-sm" onclick="openTemplateApply()">⚡ 套用模板</button>
         <button class="btn btn-sm" onclick="openCopyMeals()">📋 複製餐點</button>
         <button class="btn btn-primary" onclick="openAddFood()">+ 新增飲食</button>
@@ -4230,6 +4232,12 @@ async function init() {
     document.getElementById('logDate').value = today();
     renderToday();
   });
+
+  window.shiftDate = (n) => {
+    const el = document.getElementById('logDate');
+    el.value = addDays(el.value || today(), n);
+    renderToday();
+  };
 
   // Daily note Enter key
   document.getElementById('dailyNoteInput').addEventListener('keydown', e => {
