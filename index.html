@@ -1185,12 +1185,16 @@ input[type=date]{font-family:'DM Mono',monospace;}
     <div class="modal-body">
       <input type="hidden" id="editTripId">
       <div class="form-row">
-        <div class="form-group"><label>日期</label><input type="date" id="tripDate"></div>
+        <div class="form-group"><label>開始日期</label><input type="date" id="tripDate"></div>
         <div class="form-group"><label>地點名稱</label><input type="text" id="tripPlace" placeholder="巴吉划水、官田遊客中心..."></div>
+      </div>
+      <div class="form-row" id="tripDateEndRow" style="display:none">
+        <div class="form-group"><label>結束日期</label><input type="date" id="tripDateEnd"></div>
+        <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px;font-size:12px;color:var(--text2)">儲存後會自動涵蓋這段期間每天的出遊紀錄</div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>出遊類型</label>
-          <select id="tripType">
+          <select id="tripType" onchange="onTripTypeChange()">
             <option value="short">短程外出（2小時內）</option>
             <option value="daytrip">一日遊</option>
             <option value="overnight">過夜露營</option>
@@ -2109,11 +2113,22 @@ async function renderActivityLog() {
   const myWalks = walks.filter(w=>w.dog===currentDog);
   const myActs = acts.filter(a=>a.dog===currentDog);
   const myTrips = trips.filter(t=>t.dog===currentDog);
-  const allDates = [...new Set([...myWalks.map(w=>w.date), ...myActs.map(a=>a.date), ...myTrips.map(t=>t.date)])].sort().reverse();
+  const tripAllDates = [];
+  myTrips.forEach(t=>{ const end=t.dateEnd||t.date; let cur=t.date; while(cur<=end){tripAllDates.push(cur);const d=new Date(cur);d.setDate(d.getDate()+1);cur=d.toISOString().slice(0,10);} });
+  const allDates = [...new Set([...myWalks.map(w=>w.date), ...myActs.map(a=>a.date), ...tripAllDates])].sort().reverse();
   const walkByDate={}, actByDate={}, tripByDate={};
   myWalks.forEach(w=>walkByDate[w.date]=w);
   myActs.forEach(a=>actByDate[a.date]=a);
-  myTrips.forEach(t=>{ if(!tripByDate[t.date]) tripByDate[t.date]=[]; tripByDate[t.date].push(t); });
+  myTrips.forEach(t=>{
+    const end = t.dateEnd || t.date;
+    let cur = t.date;
+    while (cur <= end) {
+      if (!tripByDate[cur]) tripByDate[cur]=[];
+      tripByDate[cur].push(t);
+      const d = new Date(cur); d.setDate(d.getDate()+1);
+      cur = d.toISOString().slice(0,10);
+    }
+  });
   const tbody = document.getElementById('activityLogTable');
   if (!tbody) return;
   if (!allDates.length) { tbody.innerHTML='<tr><td colspan="5"><div class="empty"><div class="empty-icon">🐾</div>尚無活動紀錄</div></td></tr>'; return; }
@@ -2145,10 +2160,19 @@ async function renderActivityLog() {
 // ============================================================
 // TRIPS
 // ============================================================
+function onTripTypeChange() {
+  const type = document.getElementById('tripType').value;
+  const isMulti = type === 'overnight' || type === 'multiday';
+  document.getElementById('tripDateEndRow').style.display = isMulti ? '' : 'none';
+  if (!isMulti) document.getElementById('tripDateEnd').value = '';
+}
+
 function openTripModal(id) {
   const date = document.getElementById('logDate').value || today();
   document.getElementById('editTripId').value = id||'';
   document.getElementById('tripDate').value = date;
+  document.getElementById('tripDateEnd').value = '';
+  document.getElementById('tripDateEndRow').style.display = 'none';
   document.getElementById('tripPlace').value = '';
   document.getElementById('tripType').value = 'daytrip';
   document.getElementById('tripTransport').value = 'car';
@@ -2160,9 +2184,13 @@ function openTripModal(id) {
 async function saveTrip() {
   const place = document.getElementById('tripPlace').value.trim();
   if (!place) { alert('請填寫地點名稱'); return; }
+  const dateStart = document.getElementById('tripDate').value;
+  const dateEnd = document.getElementById('tripDateEnd').value || null;
+  if (dateEnd && dateEnd < dateStart) { alert('結束日期不能早於開始日期'); return; }
   const data = {
     dog: currentDog,
-    date: document.getElementById('tripDate').value,
+    date: dateStart,
+    dateEnd: dateEnd || null,
     place,
     type: document.getElementById('tripType').value,
     transport: document.getElementById('tripTransport').value,
@@ -2184,7 +2212,7 @@ async function saveTrip() {
 async function renderTodayTrip() {
   const dateStr = document.getElementById('logDate').value || today();
   const all = await dbAll('trip_log');
-  const todayTrips = all.filter(t => t.dog===currentDog && t.date===dateStr);
+  const todayTrips = all.filter(t => t.dog===currentDog && t.date<=dateStr && (t.dateEnd||t.date)>=dateStr);
   const el = document.getElementById('todayTripSummary');
   if (!el) return;
   const TRIP_TYPE_LABEL = {short:'短程外出',daytrip:'一日遊',overnight:'過夜露營',multiday:'多日旅行'};
@@ -2205,7 +2233,7 @@ async function renderTodayTrip() {
     return `<div style="background:var(--accent-l);border:1px solid #e8c88a;border-radius:8px;padding:9px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:10px">
       <div>
         <strong style="font-size:13px">🗺 ${t.place}</strong>
-        <span style="font-size:12px;color:var(--accent-d);margin-left:8px">${TRIP_TYPE_LABEL[t.type]||t.type} · ${TRANSPORT_LABEL[t.transport]||t.transport}</span>
+        <span style="font-size:12px;color:var(--accent-d);margin-left:8px">${t.dateEnd ? `${t.date} ～ ${t.dateEnd} · ` : ''}${TRIP_TYPE_LABEL[t.type]||t.type} · ${TRANSPORT_LABEL[t.transport]||t.transport}</span>
         ${flags ? `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">${flags}</div>` : ''}
         ${t.note ? `<div style="font-size:12px;color:var(--text2);margin-top:3px">${t.note}</div>` : ''}
       </div>
@@ -3019,7 +3047,7 @@ async function renderCharts() {
   const tripRange = parseInt(document.getElementById('tripAnalysisRange')?.value||90);
   const tripDates2 = new Set();
   for(let i=tripRange-1;i>=0;i--){const d=new Date(now2);d.setDate(d.getDate()-i);tripDates2.add(d.toISOString().slice(0,10));}
-  const allTrips2 = (await dbAll('trip_log')).filter(t=>t.dog===currentDog && tripDates2.has(t.date));
+  const allTrips2 = (await dbAll('trip_log')).filter(t=>t.dog===currentDog && (tripDates2.has(t.date) || (t.dateEnd && [...tripDates2].some(d=>d>=t.date&&d<=t.dateEnd))));
   const myHealth3 = allHealth.filter(h=>h.dog===currentDog);
   const TRIP_TYPE_LABEL2 = {short:'短程外出',daytrip:'一日遊',overnight:'過夜露營',multiday:'多日旅行'};
 
