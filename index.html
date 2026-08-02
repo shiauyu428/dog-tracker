@@ -1495,7 +1495,7 @@ function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.g
 function fmtDate(d) { if(!d) return ''; const dt = new Date(d+'T00:00:00'); return `${dt.getMonth()+1}/${dt.getDate()}`; }
 function fmtDateFull(d) { if(!d) return ''; const dt = new Date(d+'T00:00:00'); return `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`; }
 function daysDiff(dateStr) { const now=new Date(); now.setHours(0,0,0,0); return Math.round((new Date(dateStr+'T00:00:00')-now)/86400000); }
-function addDays(dateStr, n) { const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function addDays(dateStr, n) { const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function dogKey(date) { return `${currentDog}_${date}`; }
 
 const FRESH_CATS = ['鮮食'];
