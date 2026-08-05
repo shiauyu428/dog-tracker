@@ -841,6 +841,23 @@ input[type=date]{font-family:'DM Mono',monospace;}
     </div>
   </div>
 
+    <!-- 一次性資料修正區 -->
+    <div id="migrationBlock" style="display:none;margin-top:16px;padding:0 24px">
+      <div class="card">
+        <div class="card-hdr"><h2>🔧 資料修正工具</h2></div>
+        <div class="card-body">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+            <strong>菜包 鹿皮</strong> 熱量密度修正：<br>
+            過去為方便計算每支約 40 kcal，現改為正確值 <strong>3.73 kcal/g</strong>。<br>
+            點下方按鈕可自動依現有 kcal 紀錄換算出正確公克數（kcal 不變，g 重算）。
+          </div>
+          <button class="btn btn-primary" onclick="migrateDeerSkin()">🦌 一鍵換算鹿皮紀錄</button>
+          <div id="migrationResult" style="margin-top:10px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </main>
 </div>
 
@@ -4483,6 +4500,37 @@ function scheduleSync() {
 }
 
 
+async function migrateDeerSkin() {
+  const NEW_KCAL_PER_G = 3.73;
+  const FOOD_NAME = '菜包 鹿皮';
+  const resultEl = document.getElementById('migrationResult');
+  resultEl.textContent = '處理中...';
+
+  // 1. 更新 food_db
+  const allFoodDb = await dbAll('food_db');
+  const dbEntry = allFoodDb.find(f => f.name === FOOD_NAME);
+  if (dbEntry) {
+    await dbPut('food_db', {...dbEntry, kcal_per_g: NEW_KCAL_PER_G});
+  }
+
+  // 2. 更新 food_log
+  const allLogs = await dbAll('food_log');
+  const targets = allLogs.filter(f => f.food === FOOD_NAME);
+  let count = 0;
+  for (const log of targets) {
+    const kcal = log.kcal || 0;
+    const newGrams = kcal > 0 ? Math.round(kcal / NEW_KCAL_PER_G * 10) / 10 : log.grams;
+    await dbPut('food_log', {...log, grams: newGrams, kcal_per_g: NEW_KCAL_PER_G});
+    count++;
+  }
+
+  localStorage.setItem('dgt_migrated_deer_skin', '1');
+  document.getElementById('migrationBlock').style.display = 'none';
+  resultEl.innerHTML = '';
+  alert(`✅ 完成！已更新 ${count} 筆鹿皮紀錄（kcal 不變，g 已依 3.73 kcal/g 重新換算）。${dbEntry ? '' : '\n⚠️ 食物資料庫找不到「菜包 鹿皮」，請手動更新。'}`);
+  scheduleSync();
+}
+
 init();
 
 // ============================================================
@@ -4507,9 +4555,16 @@ Object.assign(window, {
   saveDailyNote, renderDailyNotes,
   initExportTable, previewExportTable, downloadExportTable, setEtDog,
   saveActivities, refetchAutofill,
-  onTripTypeChange, openTripModal, saveTrip, delTrip,
+  onTripTypeChange, openTripModal, saveTrip, delTrip, renderTodayTrip,
   gdriveSignIn, gdriveSignOut,
+  migrateDeerSkin,
 });
+
+// 顯示資料修正區（未完成過才顯示）
+if (!localStorage.getItem('dgt_migrated_deer_skin')) {
+  const mb = document.getElementById('migrationBlock');
+  if (mb) mb.style.display = '';
+}
 </script>
 <!-- Mobile bottom tab bar -->
 <nav class="mob-tabbar">
