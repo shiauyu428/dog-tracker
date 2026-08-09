@@ -321,7 +321,8 @@ input[type=date]{font-family:'DM Mono',monospace;}
         <button class="btn btn-sm" id="btnGoToday">今天</button>
         <button class="btn btn-sm" onclick="shiftDate(1)">明天 ›</button>
         <button class="btn btn-green btn-sm" onclick="openTemplateApply()">⚡ 套用模板</button>
-        <button class="btn btn-sm" onclick="openCopyMeals()">📋 複製餐點</button>
+        <button class="btn btn-sm" onclick="quickCopyYesterday()">📋 複製昨日</button>
+        <button class="btn btn-sm" onclick="openCopyMeals()">📋 自訂複製</button>
         <button class="btn btn-primary" onclick="openAddFood()">+ 新增飲食</button>
       </div>
     </div>
@@ -3804,6 +3805,36 @@ async function saveHealthRecord() {
 // ============================================================
 // COPY MEALS
 // ============================================================
+async function quickCopyYesterday() {
+  const dateStr = document.getElementById('logDate').value || today();
+  const from = addDays(dateStr, -1);
+  const to = dateStr;
+
+  const allFood = await dbAll('food_log');
+  const items = allFood.filter(f => f.date === from);
+
+  if (items.length === 0) { alert(`${from} 沒有餐點紀錄可以複製`); return; }
+
+  const already = allFood.filter(f => f.date === to);
+  if (already.length > 0) {
+    if (!confirm(`今天（${to}）已有 ${already.length} 筆飲食紀錄，確定還要複製 ${from} 的 ${items.length} 筆嗎？`)) return;
+  }
+
+  const newIds = [];
+  for (const item of items) {
+    const {id, date, ...rest} = item;
+    const newId = await dbAdd('food_log', {...rest, date: to});
+    if (newId) newIds.push(newId);
+  }
+
+  _lastEatenCache = null;
+  const dogLabel = [...new Set(items.map(f => f.dog === 0 ? '暴龍' : '阿肥'))].join('、');
+  showUndoBar(`已複製 ${dogLabel} ${from} → ${to}（${newIds.length} 筆）`, newIds);
+
+  const viewDate = document.getElementById('logDate').value || today();
+  if (to === viewDate) renderToday();
+}
+
 function openCopyMeals() {
   const dateStr = document.getElementById('logDate').value || today();
   // Default: copy from today to tomorrow
@@ -4545,7 +4576,7 @@ Object.assign(window, {
   renderCharts, initChartDates,
   openAddTemplate, addTplRow, saveTemplate, editTemplate, applyTemplate, applyTemplateWithDate, delTemplate, toggleTpl, openTemplateApply, renderApplyTplList, getTplOptionsHTML,
   showUndoBar, hideUndoBar, undoApplyTemplate,
-  openCopyMeals, confirmCopyMeals, updateCopyPreview,
+  quickCopyYesterday, openCopyMeals, confirmCopyMeals, updateCopyPreview,
   openAddFoodDb, saveFoodDb, editFoodDb, delFoodDb, renderFoodDb,
   saveSettings, loadSettings,
   delEntry, exportData, importData, updateFoodEntry, saveCurrentEntriesAsTemplate,
