@@ -3805,34 +3805,18 @@ async function saveHealthRecord() {
 // ============================================================
 // COPY MEALS
 // ============================================================
-async function quickCopyYesterday() {
+function quickCopyYesterday() {
   const dateStr = document.getElementById('logDate').value || today();
   const from = addDays(dateStr, -1);
-  const to = dateStr;
-
-  const allFood = await dbAll('food_log');
-  const items = allFood.filter(f => f.date === from);
-
-  if (items.length === 0) { alert(`${from} 沒有餐點紀錄可以複製`); return; }
-
-  const already = allFood.filter(f => f.date === to);
-  if (already.length > 0) {
-    if (!confirm(`今天（${to}）已有 ${already.length} 筆飲食紀錄，確定還要複製 ${from} 的 ${items.length} 筆嗎？`)) return;
-  }
-
-  const newIds = [];
-  for (const item of items) {
-    const {id, date, ...rest} = item;
-    const newId = await dbAdd('food_log', {...rest, date: to});
-    if (newId) newIds.push(newId);
-  }
-
-  _lastEatenCache = null;
-  const dogLabel = [...new Set(items.map(f => f.dog === 0 ? '暴龍' : '阿肥'))].join('、');
-  showUndoBar(`已複製 ${dogLabel} ${from} → ${to}（${newIds.length} 筆）`, newIds);
-
-  const viewDate = document.getElementById('logDate').value || today();
-  if (to === viewDate) renderToday();
+  document.getElementById('copyFromDate').value = from;
+  document.getElementById('copyToDate').value = dateStr;
+  document.getElementById('copyDogSelect').value = 'both';
+  document.getElementById('copyMealsPreview').style.display = 'none';
+  ['copyFromDate','copyToDate','copyDogSelect'].forEach(id => {
+    document.getElementById(id).onchange = updateCopyPreview;
+  });
+  updateCopyPreview();
+  openModal('modalCopyMeals');
 }
 
 function openCopyMeals() {
