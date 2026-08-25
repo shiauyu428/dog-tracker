@@ -3419,7 +3419,17 @@ async function saveFoodDb() {
     // Editing: keep original addedDate, only update if user explicitly changed it
     const all = await dbAll('food_db'); const existing = all.find(x=>x.id===parseInt(id));
     data.addedDate = inputAddedDate || existing?.addedDate || '';
+    const oldName = existing?.name;
     data.id=parseInt(id); await dbPut('food_db',data);
+    // 若名稱有改，同步更新 food_log 裡的所有同名紀錄
+    if (oldName && oldName !== name) {
+      const allLogs = await dbAll('food_log');
+      const targets = allLogs.filter(f => f.food === oldName);
+      for (const log of targets) await dbPut('food_log', {...log, food: name});
+      if (targets.length > 0) {
+        setTimeout(() => alert(`✅ 已同步更新 ${targets.length} 筆飲食紀錄的名稱：「${oldName}」→「${name}」`), 100);
+      }
+    }
   } else {
     // New: set today as addedDate
     data.addedDate = inputAddedDate || today();
