@@ -817,8 +817,35 @@ input[type=date]{font-family:'DM Mono',monospace;}
           <div class="card-body">
             <div class="form-group"><label>名字</label><input type="text" id="s0name" placeholder="暴龍"></div>
             <div class="form-row">
-              <div class="form-group"><label>體重(kg)</label><input type="number" id="s0weight" step="0.1"></div>
+              <div class="form-group"><label>體重(kg)</label><input type="number" id="s0weight" step="0.1" oninput="syncDerWeight(0)"></div>
               <div class="form-group"><label>每日熱量目標(kcal)</label><input type="number" id="s0kcal"></div>
+            </div>
+            <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface2);margin-bottom:10px">
+              <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">🔢 DER 每日熱量需求計算</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>計算用體重(kg) <span style="font-weight:400;color:var(--text3);font-size:11px">（減重可填目標體重）</span></label>
+                  <input type="number" id="s0derWeight" step="0.1" oninput="calcDER(0)" placeholder="自動帶入">
+                </div>
+                <div class="form-group" style="flex:2"><label>需求因子</label>
+                  <select id="s0derFactor" onchange="calcDER(0)">
+                    <option value="1.4">1.4 — 老犬 / 極低活動量</option>
+                    <option value="1.6" selected>1.6 — 絕育成犬（一般）</option>
+                    <option value="1.8">1.8 — 未絕育成犬</option>
+                    <option value="1.0">1.0 — 減重中（理想體重計算）</option>
+                    <option value="1.7">1.7 — 增重中</option>
+                    <option value="2.0">2.0 — 輕度工作 / 活躍</option>
+                    <option value="custom">自訂...</option>
+                  </select>
+                </div>
+                <div class="form-group" id="s0derCustomWrap" style="display:none">
+                  <label>自訂因子</label><input type="number" id="s0derCustom" step="0.1" min="0.5" max="10" oninput="calcDER(0)">
+                </div>
+              </div>
+              <div id="s0derResult" style="font-size:13px;color:var(--text2);display:none">
+                RER = <span id="s0rer">—</span> kcal　DER = <span id="s0der" style="font-weight:700;color:var(--accent-d)">—</span> kcal
+                <button class="btn btn-sm" style="margin-left:10px" onclick="applyDER(0)">套用為熱量目標</button>
+              </div>
             </div>
             <div class="form-group"><label>每日散步目標(km)</label><input type="number" id="s0walk" step="0.1"></div>
             <button class="btn btn-primary" onclick="saveSettings(0)">儲存</button>
@@ -830,8 +857,35 @@ input[type=date]{font-family:'DM Mono',monospace;}
           <div class="card-body">
             <div class="form-group"><label>名字</label><input type="text" id="s1name" placeholder="阿肥"></div>
             <div class="form-row">
-              <div class="form-group"><label>體重(kg)</label><input type="number" id="s1weight" step="0.1"></div>
+              <div class="form-group"><label>體重(kg)</label><input type="number" id="s1weight" step="0.1" oninput="syncDerWeight(1)"></div>
               <div class="form-group"><label>每日熱量目標(kcal)</label><input type="number" id="s1kcal"></div>
+            </div>
+            <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface2);margin-bottom:10px">
+              <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">🔢 DER 每日熱量需求計算</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>計算用體重(kg) <span style="font-weight:400;color:var(--text3);font-size:11px">（減重可填目標體重）</span></label>
+                  <input type="number" id="s1derWeight" step="0.1" oninput="calcDER(1)" placeholder="自動帶入">
+                </div>
+                <div class="form-group" style="flex:2"><label>需求因子</label>
+                  <select id="s1derFactor" onchange="calcDER(1)">
+                    <option value="1.4">1.4 — 老犬 / 極低活動量</option>
+                    <option value="1.6" selected>1.6 — 絕育成犬（一般）</option>
+                    <option value="1.8">1.8 — 未絕育成犬</option>
+                    <option value="1.0">1.0 — 減重中（理想體重計算）</option>
+                    <option value="1.7">1.7 — 增重中</option>
+                    <option value="2.0">2.0 — 輕度工作 / 活躍</option>
+                    <option value="custom">自訂...</option>
+                  </select>
+                </div>
+                <div class="form-group" id="s1derCustomWrap" style="display:none">
+                  <label>自訂因子</label><input type="number" id="s1derCustom" step="0.1" min="0.5" max="10" oninput="calcDER(1)">
+                </div>
+              </div>
+              <div id="s1derResult" style="font-size:13px;color:var(--text2);display:none">
+                RER = <span id="s1rer">—</span> kcal　DER = <span id="s1der" style="font-weight:700;color:var(--accent-d)">—</span> kcal
+                <button class="btn btn-sm" style="margin-left:10px" onclick="applyDER(1)">套用為熱量目標</button>
+              </div>
             </div>
             <div class="form-group"><label>每日散步目標(km)</label><input type="number" id="s1walk" step="0.1"></div>
             <button class="btn btn-primary" onclick="saveSettings(1)">儲存</button>
@@ -3476,12 +3530,53 @@ async function delFoodDb(id) { if(!confirm('確定刪除？')) return; await dbD
 // ============================================================
 // SETTINGS
 // ============================================================
+function syncDerWeight(i) {
+  const w = document.getElementById(`s${i}weight`).value;
+  const dw = document.getElementById(`s${i}derWeight`);
+  if (dw && !dw._manuallyEdited) dw.value = w;
+  calcDER(i);
+}
+function calcDER(i) {
+  const derWeightEl = document.getElementById(`s${i}derWeight`);
+  const weight = parseFloat(derWeightEl?.value || document.getElementById(`s${i}weight`).value) || 0;
+  const factorSel = document.getElementById(`s${i}derFactor`).value;
+  const customWrap = document.getElementById(`s${i}derCustomWrap`);
+  const isCustom = factorSel === 'custom';
+  customWrap.style.display = isCustom ? '' : 'none';
+  const factor = isCustom ? (parseFloat(document.getElementById(`s${i}derCustom`).value) || 0) : parseFloat(factorSel);
+  const resultEl = document.getElementById(`s${i}derResult`);
+  if (!weight || !factor) { resultEl.style.display = 'none'; return; }
+  const rer = Math.round(70 * Math.pow(weight, 0.75));
+  const der = Math.round(rer * factor);
+  document.getElementById(`s${i}rer`).textContent = rer;
+  document.getElementById(`s${i}der`).textContent = der;
+  resultEl.style.display = '';
+}
+function applyDER(i) {
+  const val = document.getElementById(`s${i}der`).textContent;
+  if (val && val !== '—') document.getElementById(`s${i}kcal`).value = val;
+}
 async function loadSettings() {
   for (let i=0;i<2;i++) {
     document.getElementById(`s${i}name`).value = await getSetting(`name_${i}`, DOG_NAMES[i]);
-    document.getElementById(`s${i}weight`).value = await getSetting(`weight_${i}`, '');
+    const w = await getSetting(`weight_${i}`, '');
+    document.getElementById(`s${i}weight`).value = w;
     document.getElementById(`s${i}kcal`).value = await getSetting(`kcalTarget_${i}`, '');
     document.getElementById(`s${i}walk`).value = await getSetting(`walkTarget_${i}`, '');
+    // 計算用體重：預設帶入實際體重
+    const derWEl = document.getElementById(`s${i}derWeight`);
+    if (derWEl) derWEl.value = w;
+    const savedFactor = await getSetting(`derFactor_${i}`, '1.6');
+    const sel = document.getElementById(`s${i}derFactor`);
+    const knownValues = ['1.4','1.6','1.8','1.0','1.7','2.0'];
+    if (knownValues.includes(savedFactor)) {
+      sel.value = savedFactor;
+    } else {
+      sel.value = 'custom';
+      document.getElementById(`s${i}derCustomWrap`).style.display = '';
+      document.getElementById(`s${i}derCustom`).value = savedFactor;
+    }
+    calcDER(i);
   }
 }
 async function saveSettings(idx) {
@@ -3489,6 +3584,9 @@ async function saveSettings(idx) {
   await setSetting(`weight_${idx}`, parseFloat(document.getElementById(`s${idx}weight`).value)||0);
   await setSetting(`kcalTarget_${idx}`, parseInt(document.getElementById(`s${idx}kcal`).value)||0);
   await setSetting(`walkTarget_${idx}`, parseFloat(document.getElementById(`s${idx}walk`).value)||0);
+  const factorSel = document.getElementById(`s${idx}derFactor`).value;
+  const factor = factorSel === 'custom' ? (document.getElementById(`s${idx}derCustom`).value || '1.6') : factorSel;
+  await setSetting(`derFactor_${idx}`, factor);
   const el=document.getElementById(`s${idx}saved`); el.style.display='inline'; setTimeout(()=>el.style.display='none',2000);
 }
 
@@ -4572,7 +4670,7 @@ Object.assign(window, {
   showUndoBar, hideUndoBar, undoApplyTemplate,
   quickCopyYesterday, openCopyMeals, confirmCopyMeals, updateCopyPreview,
   openAddFoodDb, saveFoodDb, editFoodDb, delFoodDb, renderFoodDb,
-  saveSettings, loadSettings,
+  saveSettings, loadSettings, calcDER, applyDER, syncDerWeight,
   delEntry, exportData, importData, updateFoodEntry, saveCurrentEntriesAsTemplate,
   openAddVege, saveVege, editVege, delVege, renderVegeLog,
   toggleWaterDetail, saveWaterManual,
