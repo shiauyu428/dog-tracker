@@ -1190,7 +1190,7 @@ input[type=date]{font-family:'DM Mono',monospace;}
       <div class="form-row">
         <div class="form-group"><label>類型</label>
           <select id="foodDbType">
-            <option>乾糧</option><option>溼糧</option><option>鮮食</option><option>零食/啃咬</option>
+            <option>乾糧</option><option>溼糧</option><option>鮮食</option><option>商品化鮮食</option><option>凍乾</option><option>零食/啃咬</option><option>保養品</option>
             <option>凍乾</option><option>罐頭</option><option>保養品</option><option>其他</option>
           </select>
         </div>
@@ -1570,7 +1570,7 @@ function daysDiff(dateStr) { const now=new Date(); now.setHours(0,0,0,0); return
 function addDays(dateStr, n) { const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function dogKey(date) { return `${currentDog}_${date}`; }
 
-const FRESH_CATS = ['鮮食'];
+const FRESH_CATS = ['鮮食', '商品化鮮食'];
 
 const ACTIVITY_TYPES = [
   {key:'sniff_indoor',  label:'室內嗅聞',     icon:'👃', color:'#4a7c59'},
@@ -1627,7 +1627,7 @@ async function renderToday() {
   const [kcalTgt, walkTgt] = await Promise.all([getSetting(`kcalTarget_${currentDog}`,0), getSetting(`walkTarget_${currentDog}`,0)]);
 
   const [allFood, allWalk, allHealth] = await Promise.all([dbAll('food_log'), dbAll('walk_log'), dbAll('health_log')]);
-  const CAT_ORDER = ['乾糧','溼糧','鮮食','凍乾','零食/啃咬','保養品'];
+  const CAT_ORDER = ['乾糧','溼糧','鮮食','商品化鮮食','凍乾','零食/啃咬','保養品'];
   const catRank = c => { const i = CAT_ORDER.indexOf(c); return i === -1 ? 99 : i; };
   const dayFood = allFood
     .filter(f => f.dog===currentDog && f.date===dateStr)
@@ -1823,7 +1823,7 @@ async function renderToday() {
 // ============================================================
 // FOOD
 // ============================================================
-const FOOD_CATS = ['乾糧','溼糧','鮮食','凍乾','零食/啃咬','保養品'];
+const FOOD_CATS = ['乾糧','溼糧','鮮食','商品化鮮食','凍乾','零食/啃咬','保養品'];
 let _pickerCat = '乾糧';
 
 function openAddFood() {
@@ -1949,8 +1949,10 @@ async function addFoodRow() {
       <div class="form-group" style="flex:1;min-width:80px;margin-bottom:0"><label>類別</label>
         <select id="fManualCat${idx}" style="width:100%">
           <option value="鮮食">鮮食</option>
+          <option value="商品化鮮食">商品化鮮食</option>
           <option value="乾糧">乾糧</option>
           <option value="溼糧">溼糧</option>
+          <option value="凍乾">凍乾</option>
           <option value="零食/啃咬">零食/啃咬</option>
           <option value="保養品">保養品</option>
           <option value="其他">其他</option>
@@ -2432,7 +2434,7 @@ async function autofill24hr(date, timeStr) {
   const kibbleCats = ['乾糧','溼糧','罐頭','凍乾'];
   const snackCats  = ['零食/啃咬'];
   const suppCats   = ['保養品'];
-  const freshCats  = ['鮮食'];
+  const freshCats  = ['鮮食', '商品化鮮食'];
 
   const getCat = f => (f.cat||'').trim();
   const foodMap = await getFoodDbMap();
@@ -3510,7 +3512,7 @@ async function renderFoodDb() {
   const q=(document.getElementById('foodSearch')?.value||'').toLowerCase();
   let foods=(await dbAll('food_db')).filter(f=>!q||f.name.toLowerCase().includes(q)||(f.brand||'').toLowerCase().includes(q));
   foods.sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||a.name.localeCompare(b.name,'zh-TW'));
-  const catTag={'乾糧':'tag-amber','溼糧':'tag-blue','鮮食':'tag-green','零食/啃咬':'tag-red','凍乾':'tag-purple','保養品':'','罐頭':'tag-blue'};
+  const catTag={'乾糧':'tag-amber','溼糧':'tag-blue','鮮食':'tag-green','商品化鮮食':'tag-green','零食/啃咬':'tag-red','凍乾':'tag-purple','保養品':'','罐頭':'tag-blue'};
   const tbody=document.getElementById('foodDbTable');
   tbody.innerHTML = foods.length===0
     ? '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🗃️</div>尚無食物</div></td></tr>'
@@ -3689,7 +3691,7 @@ const WATER_BY_NAME = {
   'NAS 山羊奶粉': 0, 'Zeal 牛奶': 88,
 };
 const WATER_BY_CAT = {
-  '溼糧': 75, '罐頭': 75, '鮮食': 70, '護理': 100,
+  '溼糧': 75, '罐頭': 75, '鮮食': 70, '商品化鮮食': 70, '護理': 100,
   '乾糧': 10, '凍乾': 8, '零食/啃咬': 15, '保養品': 0,
 };
 
@@ -3702,7 +3704,7 @@ async function calcWater(dayFood, dateStr) {
   const breakdown = [];
   let autoTotal = 0;
 
-  const fresh = dayFood.filter(f => f.cat === '鮮食');
+  const fresh = dayFood.filter(f => f.cat === '鮮食' || f.cat === '商品化鮮食');
   const wet = dayFood.filter(f => f.cat === '溼糧' || f.cat === '罐頭');
 
   const freshWater = fresh.reduce((s,f) => s + (f.grams||0) * getMoisturePct(f.food, f.cat) / 100, 0);
@@ -4190,7 +4192,7 @@ function buildTableHTML(data, inline=false) {
   const DOG_NAMES = {0:'🦖 暴龍', 1:'🐶 阿肥'};
 
   // Group by time, then by category order within each time
-  const CAT_ORDER = ['乾糧','溼糧','鮮食','凍乾','零食/啃咬','保養品'];
+  const CAT_ORDER = ['乾糧','溼糧','鮮食','商品化鮮食','凍乾','零食/啃咬','保養品'];
   const catRank = c => { const i = CAT_ORDER.indexOf(c); return i === -1 ? 99 : i; };
   const timeGroups = {};
   rows.forEach(f => {
