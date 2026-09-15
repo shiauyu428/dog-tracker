@@ -422,16 +422,26 @@ input[type=date]{font-family:'DM Mono',monospace;}
             <button class="btn btn-sm btn-primary" onclick="saveWalk()">儲存</button>
             <div id="walkMsg" style="color:var(--green);font-size:12px;display:none">✓</div>
           </div>
-          <!-- Walk extras: 吃草 / 撿食 -->
-          <div style="display:flex;gap:16px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-              <input type="checkbox" id="walkAteGrass" style="width:16px;height:16px;cursor:pointer">
-              <span style="font-size:15px">🌱</span><span>吃草</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-              <input type="checkbox" id="walkScavenged" style="width:16px;height:16px;cursor:pointer">
-              <span style="font-size:15px">👅</span><span>撿食</span>
-            </label>
+          <!-- Walk extras: 吃草 / 撿食 / 反應劇烈 -->
+          <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                <input type="checkbox" id="walkAteGrass" style="width:16px;height:16px;cursor:pointer">
+                <span style="font-size:15px">🌱</span><span>吃草</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                <input type="checkbox" id="walkScavenged" style="width:16px;height:16px;cursor:pointer">
+                <span style="font-size:15px">👅</span><span>撿食</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                <input type="checkbox" id="walkReaction" style="width:16px;height:16px;cursor:pointer" onchange="toggleReactionNote()">
+                <span style="font-size:15px">🚨</span><span>對路人/狗反應劇烈</span>
+              </label>
+            </div>
+            <div id="reactionNoteWrap" style="display:none">
+              <input type="text" id="walkReactionNote" placeholder="描述事件（例：對腳踏車騎士吠叫約10秒，之後可以回神）"
+                style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'Noto Sans TC',sans-serif">
+            </div>
           </div>
           <!-- Activity checkboxes -->
           <div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">嗅聞 / 互動活動（有做就打勾）</div>
@@ -598,7 +608,7 @@ input[type=date]{font-family:'DM Mono',monospace;}
     <div class="topbar"><h1>活動紀錄</h1></div>
     <div class="content">
       <div class="card" style="margin-bottom:16px"><div class="card-body" style="padding:0">
-        <table><thead><tr><th>日期</th><th>散步(km)</th><th>吃草</th><th>撿食</th><th>活動項目</th><th>出遊</th><th>備註</th></tr></thead>
+        <table><thead><tr><th>日期</th><th>散步(km)</th><th>吃草</th><th>撿食</th><th>反應劇烈</th><th>活動項目</th><th>出遊</th><th>備註</th></tr></thead>
         <tbody id="activityLogTable"></tbody></table>
       </div></div>
     </div>
@@ -1672,9 +1682,16 @@ async function renderToday() {
     if(dayWalk[0].note) document.getElementById('walkNote').value = dayWalk[0].note;
     document.getElementById('walkAteGrass').checked = dayWalk[0].ateGrass || false;
     document.getElementById('walkScavenged').checked = dayWalk[0].scavenged || false;
+    const hasReaction = dayWalk[0].reaction || false;
+    document.getElementById('walkReaction').checked = hasReaction;
+    document.getElementById('reactionNoteWrap').style.display = hasReaction ? '' : 'none';
+    document.getElementById('walkReactionNote').value = dayWalk[0].reactionNote || '';
   } else {
     document.getElementById('walkAteGrass').checked = false;
     document.getElementById('walkScavenged').checked = false;
+    document.getElementById('walkReaction').checked = false;
+    document.getElementById('reactionNoteWrap').style.display = 'none';
+    document.getElementById('walkReactionNote').value = '';
   }
 
   // Activity — fetch and apply to static checkboxes
@@ -2118,15 +2135,23 @@ async function renderFoodLog() {
 // ============================================================
 // WALK
 // ============================================================
+function toggleReactionNote() {
+  const checked = document.getElementById('walkReaction').checked;
+  document.getElementById('reactionNoteWrap').style.display = checked ? '' : 'none';
+  if (!checked) document.getElementById('walkReactionNote').value = '';
+}
+
 async function saveWalk() {
   const date = document.getElementById('logDate').value || today();
   const km = parseFloat(document.getElementById('walkInput').value); if(isNaN(km)||km<0) return;
   const note = document.getElementById('walkNote').value;
   const ateGrass = document.getElementById('walkAteGrass').checked;
   const scavenged = document.getElementById('walkScavenged').checked;
+  const reaction = document.getElementById('walkReaction').checked;
+  const reactionNote = reaction ? document.getElementById('walkReactionNote').value.trim() : '';
   const existing = (await dbAll('walk_log')).filter(w => w.dog===currentDog && w.date===date);
   for (const w of existing) await dbDel('walk_log', w.id);
-  await dbAdd('walk_log', {dog:currentDog, date, km, note, ateGrass, scavenged});
+  await dbAdd('walk_log', {dog:currentDog, date, km, note, ateGrass, scavenged, reaction, reactionNote});
   const msg = document.getElementById('walkMsg'); msg.style.display='block';
   setTimeout(()=>msg.style.display='none', 2000);
   renderToday();
@@ -2205,7 +2230,7 @@ async function renderActivityLog() {
   });
   const tbody = document.getElementById('activityLogTable');
   if (!tbody) return;
-  if (!allDates.length) { tbody.innerHTML='<tr><td colspan="5"><div class="empty"><div class="empty-icon">🐾</div>尚無活動紀錄</div></td></tr>'; return; }
+  if (!allDates.length) { tbody.innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">🐾</div>尚無活動紀錄</div></td></tr>'; return; }
   const TRIP_TYPE_LABEL = {short:'短程外出',daytrip:'一日遊',overnight:'過夜露營',multiday:'多日旅行'};
   tbody.innerHTML = allDates.map(d => {
     const w = walkByDate[d];
@@ -2218,12 +2243,14 @@ async function renderActivityLog() {
     const tripLabels = ts.map(t => `<span style="font-size:11px;background:var(--accent-l);color:var(--accent-d);padding:2px 7px;border-radius:99px;margin-right:3px;white-space:nowrap">🗺 ${t.place} (${TRIP_TYPE_LABEL[t.type]||t.type})</span>`).join('');
     const tripNotes = ts.map(t => t.note ? `<div style="font-size:12px;color:var(--text3)">🗺 ${t.note}</div>` : '').join('');
     const walkNote = w?.note ? `<div style="font-size:12px;color:var(--text3)">🦮 ${w.note}</div>` : '';
-    const allNotes = walkNote + tripNotes;
+    const reactionNote = w?.reaction ? `<div style="font-size:12px;color:var(--red,#e53e3e)">🚨 ${w.reactionNote||'反應劇烈'}</div>` : '';
+    const allNotes = walkNote + reactionNote + tripNotes;
     return `<tr>
       <td style="font-family:'DM Mono',monospace;font-size:11px">${fmtDateFull(d)}</td>
       <td>${w ? '<strong>'+w.km.toFixed(1)+'</strong> km' : '<span style="color:var(--text3)">—</span>'}</td>
       <td style="text-align:center">${w?.ateGrass ? '🌱' : '<span style="color:var(--text3)">—</span>'}</td>
       <td style="text-align:center">${w?.scavenged ? '👅' : '<span style="color:var(--text3)">—</span>'}</td>
+      <td style="text-align:center">${w?.reaction ? '🚨' : '<span style="color:var(--text3)">—</span>'}</td>
       <td>${actLabels||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${tripLabels||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${allNotes||'<span style="color:var(--text3)">—</span>'}</td>
@@ -4664,7 +4691,7 @@ Object.assign(window, {
   switchDog, showPage, openModal, closeModal,
   openAddFood, addFoodRow, saveFoodEntries, renderFoodLog, toggleManualRow,
   renderFoodPicker, pickFood, calcPickedRow,
-  saveWalk, renderWalkLog,
+  saveWalk, renderWalkLog, toggleReactionNote,
   toggleCustomHealth, openDetective, saveDetective, saveHealthSimple, editHealthEvent, renderHealthLog, showRecentMedAlert,
   openAddMed, saveMed, editMed, delMed, openGiveMed, confirmGiveMed, renderMedicineList,
   renderCharts, initChartDates,
