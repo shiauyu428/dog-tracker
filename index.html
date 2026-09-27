@@ -462,11 +462,24 @@ input[type=date]{font-family:'DM Mono',monospace;}
               <input type="checkbox" value="strength"><span style="font-size:15px">🏋️</span><span>重訓</span>
             </label>
             <label class="act-check" id="chk-psoas">
-              <input type="checkbox" value="psoas"><span style="font-size:15px">💪</span><span>PSOAS POWER</span>
+              <input type="checkbox" value="psoas" onchange="togglePsoasMoves()"><span style="font-size:15px">💪</span><span>PSOAS POWER</span>
             </label>
             <label class="act-check" id="chk-recall">
               <input type="checkbox" value="recall"><span style="font-size:15px">📣</span><span>Recall</span>
             </label>
+          </div>
+          <!-- PSOAS POWER sub-moves -->
+          <div id="psoasMovesWrap" style="display:none;background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px">💪 PSOAS POWER 動作（可複選）</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px 16px">
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="psoas-cookie_shift" style="width:14px;height:14px"> Cookie Shift</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="psoas-rf_transitions" style="width:14px;height:14px"> RF Transitions</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="psoas-pivoting" style="width:14px;height:14px"> Pivoting</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="psoas-tucked_sit_kickback" style="width:14px;height:14px"> Tucked Sit to Kickback Stands</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="psoas-three_legged" style="width:14px;height:14px"> 3-Legged Stance</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="psoas-straight_cavalette" style="width:14px;height:14px"> Straight Cavalette</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="psoas-weight_shifts" style="width:14px;height:14px"> Weight Shifts</label>
+            </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
             <input type="text" id="activityCustom" placeholder="其他活動（自由輸入）"
@@ -1592,6 +1605,16 @@ const ACTIVITY_TYPES = [
   {key:'recall',        label:'Recall',       icon:'📣', color:'#1a6fa8'},
 ];
 
+const PSOAS_MOVES = [
+  {key:'cookie_shift',       label:'Cookie Shift'},
+  {key:'rf_transitions',     label:'RF Transitions'},
+  {key:'pivoting',           label:'Pivoting'},
+  {key:'tucked_sit_kickback',label:'Tucked Sit to Kickback Stands'},
+  {key:'three_legged',       label:'3-Legged Stance'},
+  {key:'straight_cavalette', label:'Straight Cavalette'},
+  {key:'weight_shifts',      label:'Weight Shifts'},
+];
+
 // ============================================================
 // NAV
 // ============================================================
@@ -1707,9 +1730,14 @@ async function renderToday() {
     if (!cb) return;
     cb.checked = checkedKeys.includes(at.key);
     lbl.classList.toggle('checked', cb.checked);
-    // visual toggle on click (re-attach to avoid duplicates)
-    cb.onchange = () => lbl.classList.toggle('checked', cb.checked);
+    if (at.key === 'psoas') cb.onchange = () => { lbl.classList.toggle('checked', cb.checked); togglePsoasMoves(); };
+    else cb.onchange = () => lbl.classList.toggle('checked', cb.checked);
   });
+  // Restore PSOAS sub-moves
+  const psoasMoves = todayAct?.psoas_moves || [];
+  const psoasWrap = document.getElementById('psoasMovesWrap');
+  if (psoasWrap) psoasWrap.style.display = checkedKeys.includes('psoas') ? '' : 'none';
+  PSOAS_MOVES.forEach(m => { const el = document.getElementById('psoas-'+m.key); if (el) el.checked = psoasMoves.includes(m.key); });
   if (todayAct?.custom) {
     const customEl = document.getElementById('activityCustom');
     if (customEl) customEl.value = todayAct.custom;
@@ -2178,6 +2206,14 @@ async function renderWalkLog() {
 // ============================================================
 // ACTIVITIES
 // ============================================================
+function togglePsoasMoves() {
+  const checked = document.getElementById('chk-psoas')?.querySelector('input')?.checked;
+  const wrap = document.getElementById('psoasMovesWrap');
+  if (!wrap) return;
+  wrap.style.display = checked ? '' : 'none';
+  if (!checked) PSOAS_MOVES.forEach(m => { const el = document.getElementById('psoas-'+m.key); if (el) el.checked = false; });
+}
+
 async function saveActivities() {
   const date = document.getElementById('logDate').value || today();
   const checked = ACTIVITY_TYPES
@@ -2185,9 +2221,12 @@ async function saveActivities() {
     .filter(cb => cb?.checked)
     .map(cb => cb.value);
   const custom = document.getElementById('activityCustom')?.value?.trim()||'';
+  const psoas_moves = checked.includes('psoas')
+    ? PSOAS_MOVES.filter(m => document.getElementById('psoas-'+m.key)?.checked).map(m => m.key)
+    : [];
   const all = await dbAll('activity_log');
   const existing = all.find(a => a.dog===currentDog && a.date===date);
-  const data = {dog:currentDog, date, types:checked, custom};
+  const data = {dog:currentDog, date, types:checked, custom, psoas_moves};
   if (existing) { data.id=existing.id; await dbPut('activity_log', data); }
   else { await dbAdd('activity_log', data); }
   const msg = document.getElementById('actMsg');
@@ -2238,7 +2277,13 @@ async function renderActivityLog() {
     const ts = tripByDate[d]||[];
     const actLabels = (a?.types||[]).map(k => {
       const t = ACTIVITY_TYPES.find(x=>x.key===k);
-      return t ? `<span style="font-size:11px;background:var(--green-l);color:var(--green);padding:2px 7px;border-radius:99px;margin-right:3px;white-space:nowrap">${t.icon} ${t.label}</span>` : '';
+      if (!t) return '';
+      let extra = '';
+      if (k === 'psoas' && (a.psoas_moves||[]).length > 0) {
+        const moveLabels = a.psoas_moves.map(mk => PSOAS_MOVES.find(m=>m.key===mk)?.label).filter(Boolean).join('、');
+        extra = `<div style="font-size:10px;color:var(--text3);margin-top:2px">${moveLabels}</div>`;
+      }
+      return `<span style="font-size:11px;background:var(--green-l);color:var(--green);padding:2px 7px;border-radius:99px;margin-right:3px;white-space:nowrap">${t.icon} ${t.label}</span>${extra}`;
     }).join('') + (a?.custom ? `<span style="font-size:11px;background:var(--surface2);color:var(--text2);padding:2px 7px;border-radius:99px">${a.custom}</span>` : '');
     const tripLabels = ts.map(t => `<span style="font-size:11px;background:var(--accent-l);color:var(--accent-d);padding:2px 7px;border-radius:99px;margin-right:3px;white-space:nowrap">🗺 ${t.place} (${TRIP_TYPE_LABEL[t.type]||t.type})</span>`).join('');
     const tripNotes = ts.map(t => t.note ? `<div style="font-size:12px;color:var(--text3)">🗺 ${t.note}</div>` : '').join('');
@@ -4691,7 +4736,7 @@ Object.assign(window, {
   switchDog, showPage, openModal, closeModal,
   openAddFood, addFoodRow, saveFoodEntries, renderFoodLog, toggleManualRow,
   renderFoodPicker, pickFood, calcPickedRow,
-  saveWalk, renderWalkLog, toggleReactionNote,
+  saveWalk, renderWalkLog, toggleReactionNote, togglePsoasMoves,
   toggleCustomHealth, openDetective, saveDetective, saveHealthSimple, editHealthEvent, renderHealthLog, showRecentMedAlert,
   openAddMed, saveMed, editMed, delMed, openGiveMed, confirmGiveMed, renderMedicineList,
   renderCharts, initChartDates,
