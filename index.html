@@ -851,6 +851,15 @@ input[type=date]{font-family:'DM Mono',monospace;}
           <div class="card-body">
             <div class="form-group"><label>名字</label><input type="text" id="s0name" placeholder="暴龍"></div>
             <div class="form-row">
+              <div class="form-group"><label>生日（年月）</label><input type="month" id="s0birthday" onchange="updateDogAge(0)"></div>
+              <div class="form-group" style="justify-content:flex-end;padding-top:18px">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                  <input type="checkbox" id="s0neutered" style="width:15px;height:15px"> 已結紮
+                </label>
+                <div id="s0ageDisplay" style="font-size:12px;color:var(--text2);margin-top:4px"></div>
+              </div>
+            </div>
+            <div class="form-row">
               <div class="form-group"><label>體重(kg)</label><input type="number" id="s0weight" step="0.1" oninput="syncDerWeight(0)"></div>
               <div class="form-group"><label>每日熱量目標(kcal)</label><input type="number" id="s0kcal"></div>
             </div>
@@ -890,6 +899,15 @@ input[type=date]{font-family:'DM Mono',monospace;}
           <div class="card-hdr"><h2>🐶 阿肥設定</h2></div>
           <div class="card-body">
             <div class="form-group"><label>名字</label><input type="text" id="s1name" placeholder="阿肥"></div>
+            <div class="form-row">
+              <div class="form-group"><label>生日（年月）</label><input type="month" id="s1birthday" onchange="updateDogAge(1)"></div>
+              <div class="form-group" style="justify-content:flex-end;padding-top:18px">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                  <input type="checkbox" id="s1neutered" style="width:15px;height:15px"> 已結紮
+                </label>
+                <div id="s1ageDisplay" style="font-size:12px;color:var(--text2);margin-top:4px"></div>
+              </div>
+            </div>
             <div class="form-row">
               <div class="form-group"><label>體重(kg)</label><input type="number" id="s1weight" step="0.1" oninput="syncDerWeight(1)"></div>
               <div class="form-group"><label>每日熱量目標(kcal)</label><input type="number" id="s1kcal"></div>
@@ -3692,6 +3710,19 @@ function applyDER(i) {
   const val = document.getElementById(`s${i}der`).textContent;
   if (val && val !== '—') document.getElementById(`s${i}kcal`).value = val;
 }
+function updateDogAge(i) {
+  const bday = document.getElementById(`s${i}birthday`)?.value; // YYYY-MM
+  const el = document.getElementById(`s${i}ageDisplay`);
+  if (!el) return;
+  if (!bday) { el.textContent = ''; return; }
+  const now = new Date();
+  const [byear, bmonth] = bday.split('-').map(Number);
+  let years = now.getFullYear() - byear;
+  let months = (now.getMonth() + 1) - bmonth;
+  if (months < 0) { years--; months += 12; }
+  el.textContent = years > 0 ? `${years} 歲 ${months} 個月` : `${months} 個月`;
+}
+
 async function loadSettings() {
   for (let i=0;i<2;i++) {
     document.getElementById(`s${i}name`).value = await getSetting(`name_${i}`, DOG_NAMES[i]);
@@ -3699,6 +3730,10 @@ async function loadSettings() {
     document.getElementById(`s${i}weight`).value = w;
     document.getElementById(`s${i}kcal`).value = await getSetting(`kcalTarget_${i}`, '');
     document.getElementById(`s${i}walk`).value = await getSetting(`walkTarget_${i}`, '');
+    const bday = await getSetting(`birthday_${i}`, '');
+    document.getElementById(`s${i}birthday`).value = bday;
+    document.getElementById(`s${i}neutered`).checked = !!(await getSetting(`neutered_${i}`, false));
+    updateDogAge(i);
     // 計算用體重：預設帶入實際體重
     const derWEl = document.getElementById(`s${i}derWeight`);
     if (derWEl) derWEl.value = w;
@@ -3720,6 +3755,8 @@ async function saveSettings(idx) {
   await setSetting(`weight_${idx}`, parseFloat(document.getElementById(`s${idx}weight`).value)||0);
   await setSetting(`kcalTarget_${idx}`, parseInt(document.getElementById(`s${idx}kcal`).value)||0);
   await setSetting(`walkTarget_${idx}`, parseFloat(document.getElementById(`s${idx}walk`).value)||0);
+  await setSetting(`birthday_${idx}`, document.getElementById(`s${idx}birthday`).value||'');
+  await setSetting(`neutered_${idx}`, document.getElementById(`s${idx}neutered`).checked);
   const factorSel = document.getElementById(`s${idx}derFactor`).value;
   const factor = factorSel === 'custom' ? (document.getElementById(`s${idx}derCustom`).value || '1.6') : factorSel;
   await setSetting(`derFactor_${idx}`, factor);
@@ -4807,7 +4844,7 @@ Object.assign(window, {
   showUndoBar, hideUndoBar, undoApplyTemplate,
   quickCopyYesterday, openCopyMeals, confirmCopyMeals, updateCopyPreview,
   openAddFoodDb, saveFoodDb, editFoodDb, delFoodDb, renderFoodDb,
-  saveSettings, loadSettings, calcDER, applyDER, syncDerWeight,
+  saveSettings, loadSettings, calcDER, applyDER, syncDerWeight, updateDogAge,
   delEntry, exportData, importData, updateFoodEntry, saveCurrentEntriesAsTemplate,
   openAddVege, saveVege, editVege, delVege, renderVegeLog,
   toggleWaterDetail, saveWaterManual,
