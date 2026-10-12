@@ -1228,7 +1228,8 @@ input[type=date]{font-family:'DM Mono',monospace;}
             <option>凍乾</option><option>罐頭</option><option>保養品</option><option>其他</option>
           </select>
         </div>
-        <div class="form-group"><label>kcal/g</label><input type="number" id="foodDbKcal" step="0.001" placeholder="0.000"></div>
+        <div class="form-group"><label id="foodDbKcalLabel">kcal/g</label><input type="number" id="foodDbKcal" step="0.001" placeholder="0.000"></div>
+        <div class="form-group"><label>單位 <span style="font-size:11px;color:var(--text3)">（預設 g，可改為 支/個/片）</span></label><input type="text" id="foodDbUnit" placeholder="g" style="max-width:80px" oninput="document.getElementById('foodDbKcalLabel').textContent='kcal/'+(this.value.trim()||'g')"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>阿肥評分(1-10)</label><input type="number" id="foodDbScoreA" min="1" max="10"></div>
@@ -1793,7 +1794,7 @@ async function renderToday() {
     Object.entries(byCat).sort().forEach(([cat, items]) => {
       optionsHTML += `<optgroup label="${cat}">`;
       items.sort((a,b)=>a.name.localeCompare(b.name,'zh-TW')).forEach(f => {
-        optionsHTML += `<option value="${f.id}" data-kcal="${f.kcal_per_g}" data-cat="${f.cat||''}">${f.name}</option>`;
+        optionsHTML += `<option value="${f.id}" data-kcal="${f.kcal_per_g}" data-unit="${f.unit||'g'}" data-cat="${f.cat||''}">${f.name}</option>`;
       });
       optionsHTML += '</optgroup>';
     });
@@ -1824,6 +1825,7 @@ async function renderToday() {
 
     tbody.innerHTML = dayFood.map(f => {
       const matched = allFoods.find(fd => fd.name === f.food);
+      const funit = matched?.unit || f.unit || 'g';
       const badge = getBadge(f, matched);
       // If food is not in DB (manually entered), show as text instead of dropdown
       const foodCell = matched
@@ -1846,7 +1848,7 @@ async function renderToday() {
             style="width:64px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'Noto Sans TC',sans-serif;background:var(--surface);color:var(--text)"
             oninput="updateFoodEntry(${f.id},'grams',this.value,${f.kcal_per_g||0})"
             id="fgrams-${f.id}"
-          >g
+          >${funit}
         </td>
         <td id="fkcal-${f.id}" style="font-family:'DM Mono',monospace">${Math.round(f.kcal)} kcal</td>
         <td>
@@ -1938,7 +1940,7 @@ async function renderFoodPicker(cat) {
           onmouseout="this.style.background=''"
         >
           <span style="font-size:13px;color:var(--text)">${f.name}</span>
-          <span style="font-size:11px;color:var(--text3);margin-left:8px;flex-shrink:0">${f.kcal_per_g?f.kcal_per_g+' kcal/g':''}</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:8px;flex-shrink:0">${f.kcal_per_g?f.kcal_per_g+' kcal/'+(f.unit||'g'):''}</span>
         </div>
       `).join('')}
     </div>
@@ -2059,8 +2061,8 @@ async function loadFoodOptions(selId) {
     const og = document.createElement('optgroup'); og.label = cat;
     items.sort((a,b)=>a.name.localeCompare(b.name,'zh-TW')).forEach(f => {
       const o = document.createElement('option');
-      o.value = f.id; o.textContent = f.name + (f.kcal_per_g > 0 ? ` (${f.kcal_per_g} kcal/g)` : '');
-      o.dataset.kcal = f.kcal_per_g; o.dataset.cat = f.cat||'';
+      o.value = f.id; o.textContent = f.name + (f.kcal_per_g > 0 ? ` (${f.kcal_per_g} kcal/${f.unit||'g'})` : '');
+      o.dataset.kcal = f.kcal_per_g; o.dataset.unit = f.unit||'g'; o.dataset.cat = f.cat||'';
       og.appendChild(o);
     });
     sel.appendChild(og);
@@ -2169,7 +2171,8 @@ async function renderFoodLog() {
             }
           }
         }
-        return `<tr><td style="font-family:'DM Mono',monospace;font-size:11px">${fmtDateFull(f.date)}</td><td>${f.food}${badge}</td><td><span class="tag tag-blue" style="font-size:10px">${f.cat||''}</span></td><td>${f.grams}g</td><td>${Math.round(f.kcal)} kcal</td><td style="color:var(--text3);font-size:12px">${f.note||''}</td><td><button class="btn btn-danger btn-sm" onclick="delEntry('food_log',${f.id})">刪除</button></td></tr>`;
+        const funit = dbF?.unit || f.unit || 'g';
+        return `<tr><td style="font-family:'DM Mono',monospace;font-size:11px">${fmtDateFull(f.date)}</td><td>${f.food}${badge}</td><td><span class="tag tag-blue" style="font-size:10px">${f.cat||''}</span></td><td>${f.grams}${funit}</td><td>${Math.round(f.kcal)} kcal</td><td style="color:var(--text3);font-size:12px">${f.note||''}</td><td><button class="btn btn-danger btn-sm" onclick="delEntry('food_log',${f.id})">刪除</button></td></tr>`;
       }).join('');
 }
 
@@ -3525,8 +3528,9 @@ async function applyTemplateWithDate(id) {
 // ============================================================
 function openAddFoodDb() {
   document.getElementById('foodDbTitle').textContent='新增食物';
-  ['editFoodDbId','foodDbName','foodDbBrand','foodDbKcal','foodDbScoreA','foodDbScoreR','foodDbNote'].forEach(id=>document.getElementById(id).value='');
+  ['editFoodDbId','foodDbName','foodDbBrand','foodDbKcal','foodDbScoreA','foodDbScoreR','foodDbNote','foodDbUnit'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('foodDbType').value='乾糧';
+  document.getElementById('foodDbKcalLabel').textContent='kcal/g';
   document.getElementById('foodDbAddedDate').value = today();
   openModal('modalFoodDb');
 }
@@ -3592,8 +3596,10 @@ async function saveFoodDb() {
   const id = document.getElementById('editFoodDbId').value;
   const name=document.getElementById('foodDbName').value.trim(); if(!name) return;
   const inputAddedDate = document.getElementById('foodDbAddedDate').value;
+  const unitVal = document.getElementById('foodDbUnit').value.trim();
   const data={name, brand:document.getElementById('foodDbBrand').value, cat:document.getElementById('foodDbType').value,
     kcal_per_g:parseFloat(document.getElementById('foodDbKcal').value)||0,
+    unit: unitVal || 'g',
     scoreA:document.getElementById('foodDbScoreA').value, scoreR:document.getElementById('foodDbScoreR').value,
     note:document.getElementById('foodDbNote').value};
   if(id){
@@ -3627,6 +3633,9 @@ async function editFoodDb(id) {
   document.getElementById('foodDbBrand').value=f.brand||'';
   document.getElementById('foodDbType').value=f.cat||'乾糧';
   document.getElementById('foodDbKcal').value=f.kcal_per_g;
+  const unit = f.unit || 'g';
+  document.getElementById('foodDbUnit').value = unit === 'g' ? '' : unit;
+  document.getElementById('foodDbKcalLabel').textContent = 'kcal/' + unit;
   document.getElementById('foodDbScoreA').value=f.scoreA||'';
   document.getElementById('foodDbScoreR').value=f.scoreR||'';
   document.getElementById('foodDbNote').value=f.note||'';
@@ -3645,7 +3654,7 @@ async function renderFoodDb() {
         <td><strong>${f.name}</strong>${isNewFood(f) ? ' <span style="font-size:10px;background:#deeaf8;color:#0c447c;border-radius:99px;padding:1px 6px;font-weight:500">🆕</span>' : ''}</td>
         <td style="font-size:12px;color:var(--text2)">${f.brand||''}</td>
         <td><span class="tag ${catTag[f.cat]||''}">${f.cat||''}</span></td>
-        <td style="font-family:'DM Mono',monospace">${f.kcal_per_g}</td>
+        <td style="font-family:'DM Mono',monospace">${f.kcal_per_g} <span style="font-size:10px;color:var(--text3)">kcal/${f.unit||'g'}</span></td>
         <td style="text-align:center">${f.scoreA||'-'}</td>
         <td style="text-align:center">${f.scoreR||'-'}</td>
         <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f.note||''}">${f.addedDate ? f.addedDate : ''}</td>
