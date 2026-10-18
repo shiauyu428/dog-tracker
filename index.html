@@ -500,9 +500,12 @@ input[type=date]{font-family:'DM Mono',monospace;}
           </div>
           <!-- Trip section -->
           <div style="border-top:1px solid var(--border);padding-top:12px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap">
               <span style="font-size:12px;font-weight:500;color:var(--text2)">🗺 出遊紀錄</span>
-              <button class="btn btn-sm" onclick="openTripModal()" id="tripAddBtn">+ 新增出遊</button>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm" id="tripCopyOtherBtn" style="display:none" onclick="copyOtherDogTrip()">📋 複製另一隻的出遊</button>
+                <button class="btn btn-sm" onclick="openTripModal()" id="tripAddBtn">+ 新增出遊</button>
+              </div>
             </div>
             <div id="todayTripSummary" style="font-size:13px;color:var(--text3)">今日無出遊紀錄</div>
           </div>
@@ -2429,10 +2432,37 @@ async function saveTrip() {
   renderTodayTrip();
 }
 
+async function copyOtherDogTrip() {
+  const dateStr = document.getElementById('logDate').value || today();
+  const otherDog = 1 - currentDog;
+  const all = await dbAll('trip_log');
+  const otherTrips = all.filter(t => t.dog===otherDog && t.date<=dateStr && (t.dateEnd||t.date)>=dateStr);
+  if (!otherTrips.length) return;
+  const t = otherTrips[0]; // pre-fill from first trip of other dog
+  document.getElementById('editTripId').value = '';
+  document.getElementById('tripDate').value = t.date;
+  document.getElementById('tripDateEnd').value = t.dateEnd || '';
+  document.getElementById('tripDateEndRow').style.display = t.dateEnd ? '' : 'none';
+  document.getElementById('tripPlace').value = t.place;
+  document.getElementById('tripType').value = t.type;
+  document.getElementById('tripTransport').value = t.transport||'car';
+  document.getElementById('tripNote').value = t.note||'';
+  ['eatGrass','pickup','drinkLots','swim','crowded','highActivity'].forEach(k => {
+    const el = document.getElementById('trip'+k.charAt(0).toUpperCase()+k.slice(1));
+    if (el) el.checked = !!t[k];
+  });
+  openModal('modalTrip');
+}
+
 async function renderTodayTrip() {
   const dateStr = document.getElementById('logDate').value || today();
   const all = await dbAll('trip_log');
   const todayTrips = all.filter(t => t.dog===currentDog && t.date<=dateStr && (t.dateEnd||t.date)>=dateStr);
+  // show/hide copy button based on whether the other dog has a trip today
+  const otherDog = 1 - currentDog;
+  const otherHasTrip = all.some(t => t.dog===otherDog && t.date<=dateStr && (t.dateEnd||t.date)>=dateStr);
+  const copyBtn = document.getElementById('tripCopyOtherBtn');
+  if (copyBtn) copyBtn.style.display = (otherHasTrip && !todayTrips.length) ? '' : 'none';
   const el = document.getElementById('todayTripSummary');
   if (!el) return;
   const TRIP_TYPE_LABEL = {short:'短程外出',daytrip:'一日遊',overnight:'過夜露營',multiday:'多日旅行'};
@@ -4852,7 +4882,7 @@ Object.assign(window, {
   saveDailyNote, renderDailyNotes,
   initExportTable, previewExportTable, downloadExportTable, setEtDog,
   saveActivities, refetchAutofill,
-  onTripTypeChange, openTripModal, saveTrip, delTrip, renderTodayTrip,
+  onTripTypeChange, openTripModal, saveTrip, delTrip, renderTodayTrip, copyOtherDogTrip,
   gdriveSignIn, gdriveSignOut,
   migrateDeerSkin,
 });
