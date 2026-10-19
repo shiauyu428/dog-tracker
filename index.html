@@ -998,7 +998,7 @@ input[type=date]{font-family:'DM Mono',monospace;}
       </div>
       <div id="copyMealsPreview" style="font-size:12px;color:var(--text2);margin-top:8px;padding:10px;background:var(--surface2);border-radius:8px;display:none"></div>
       <div id="copyMealsTimes" style="display:none;margin-top:12px">
-        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">調整餐別時間（選填，留空則沿用原本時間）</div>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">選擇要複製的餐別（可調整時間，留空沿用原本）</div>
         <div id="copyMealsTimeRows" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
     </div>
@@ -4206,15 +4206,20 @@ async function updateCopyPreview() {
   preview.style.display = 'block';
   preview.innerHTML = html;
 
-  // 顯示餐別時間調整欄
+  // 顯示餐別勾選 + 時間調整欄
   const presentSlots = MEAL_SLOTS.filter(s => slotCounts[s.key]);
   if (presentSlots.length > 0) {
+    // default dinner time 19:00
+    const defaultTimes = { dinner: '19:00' };
     timeRows.innerHTML = presentSlots.map(s => `
-      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
-        <span style="min-width:80px">${s.label}</span>
-        <span style="color:var(--text3);font-size:11px">原本 ${slotSample[s.key] || ''}</span>
-        <input type="time" id="copyTime_${s.key}"
-          style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-left:auto">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;min-width:110px">
+          <input type="checkbox" id="copySlot_${s.key}" checked style="width:14px;height:14px">
+          ${s.label}
+        </label>
+        <span style="color:var(--text3);font-size:11px;white-space:nowrap">原 ${slotSample[s.key] || ''}</span>
+        <input type="time" id="copyTime_${s.key}" value="${defaultTimes[s.key]||''}"
+          style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-left:auto;width:100px">
       </div>`).join('');
     timesDiv.style.display = 'block';
   } else {
@@ -4232,15 +4237,24 @@ async function confirmCopyMeals() {
 
   const dogs = dogVal === 'both' ? [0,1] : [parseInt(dogVal)];
   const allFood = await dbAll('food_log');
-  const items = allFood.filter(f => f.date === from && dogs.includes(parseInt(f.dog)));
+  const allItems = allFood.filter(f => f.date === from && dogs.includes(parseInt(f.dog)));
 
-  if (items.length === 0) { alert('來源日期沒有餐點紀錄'); return; }
+  if (allItems.length === 0) { alert('來源日期沒有餐點紀錄'); return; }
 
-  // 收集使用者設定的餐別新時間
+  // 收集勾選的餐別 & 新時間
   const slotTimes = {};
+  const selectedSlots = new Set();
   MEAL_SLOTS.forEach(s => {
-    const el = document.getElementById('copyTime_' + s.key);
-    if (el && el.value) slotTimes[s.key] = el.value;
+    const cb = document.getElementById('copySlot_' + s.key);
+    if (!cb || cb.checked) selectedSlots.add(s.key); // if checkbox not rendered, include by default
+    const timeEl = document.getElementById('copyTime_' + s.key);
+    if (timeEl && timeEl.value) slotTimes[s.key] = timeEl.value;
+  });
+
+  // Filter by selected slots (items with no time / no slot always included)
+  const items = allItems.filter(f => {
+    const slot = getMealSlot(f.time);
+    return !slot || selectedSlots.has(slot);
   });
 
   const newIds = [];
