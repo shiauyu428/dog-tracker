@@ -369,7 +369,7 @@ input[type=date]{font-family:'DM Mono',monospace;}
                 <input type="number" id="waterSyringe" placeholder="0" min="0" step="1">
               </div>
               <div class="form-group" id="waterMilkWrap" style="margin-bottom:0;display:none">
-                <label>羊奶粉加水 (ml)</label>
+                <label>羊奶/牛奶加水 (ml)</label>
                 <input type="number" id="waterMilk" placeholder="0" min="0" step="1">
               </div>
               <div class="form-group" style="margin-bottom:0">
@@ -3922,7 +3922,7 @@ async function calcWater(dayFood, dateStr) {
 
   if (extra > 0) breakdown.push({label:'額外加水', ml: extra});
   if (syringe > 0) breakdown.push({label:'針筒餵水', ml: syringe});
-  if (milk > 0) breakdown.push({label:'羊奶粉加水', ml: milk});
+  if (milk > 0) breakdown.push({label:'羊奶/牛奶加水', ml: milk});
   if (self > 0) breakdown.push({label:'自己喝（估）', ml: self});
 
   const total = autoTotal + extra + syringe + milk + self;
