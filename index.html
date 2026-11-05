@@ -3998,9 +3998,8 @@ async function saveDailyNote() {
   const text = input.value.trim();
   if (!text) return;
   const dateStr = document.getElementById('logDate').value || today();
-  const time = new Date().toTimeString().slice(0,5);
   await dbAdd('health_log', {
-    dog: currentDog, date: dateStr, time,
+    dog: currentDog, date: dateStr, time: '',
     type: '備註', severity: '',
     note: text, poop: '', vomitLook: '',
     spirit: '', appetite: '',
