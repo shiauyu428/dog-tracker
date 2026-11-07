@@ -2019,6 +2019,14 @@ async function pickFood(foodId) {
   `;
   wrap.appendChild(div);
   div.querySelector('input').focus();
+
+  // 評分警示：當前狗的評分低於 5 分
+  const scoreKey = currentDog === 0 ? 'scoreR' : 'scoreA'; // 0=暴龍(scoreR), 1=阿肥(scoreA)
+  const score = food[scoreKey];
+  if (score !== undefined && score !== '' && parseInt(score) < 5) {
+    const dogName = currentDog === 0 ? '暴龍' : '阿肥';
+    setTimeout(() => alert(`⚠️ 注意：「${food.name}」${dogName}評分僅 ${score} 分，確認要新增嗎？`), 50);
+  }
 }
 
 function calcPickedRow(input) {
