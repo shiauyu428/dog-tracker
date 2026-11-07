@@ -554,8 +554,12 @@ input[type=date]{font-family:'DM Mono',monospace;}
             <label>自訂類型</label><input type="text" id="customHealthType" placeholder="輸入事件名稱">
           </div>
           <div class="form-group"><label>詳細描述</label><textarea id="healthNote" rows="2" placeholder="描述狀況、顏色、次數等..."></textarea></div>
-          <button class="btn btn-primary" onclick="openDetective()">新增健康事件（含偵探分析）</button>
-          <button class="btn btn-sm" onclick="saveHealthSimple()" style="margin-left:8px">快速新增</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
+            <button class="btn btn-primary" onclick="openDetective()">新增健康事件（含偵探分析）</button>
+            <input type="time" id="healthSimpleTime" placeholder="時間（選填）"
+              style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Mono',monospace;background:var(--surface);color:var(--text);width:120px">
+            <button class="btn btn-sm btn-primary" onclick="saveHealthSimple()">快速新增</button>
+          </div>
         </div>
       </div>
 
@@ -2844,8 +2848,10 @@ async function saveHealthSimple() {
   if (type==='其他（自由輸入）') type = document.getElementById('customHealthType').value.trim()||'其他';
   const dogOverride = document.getElementById('healthDogOverride')?.value;
   const dog = dogOverride === '-1' ? -1 : currentDog;
-  await dbAdd('health_log', {dog, date, type, severity:document.getElementById('healthSev').value, note:document.getElementById('healthNote').value});
+  const time = document.getElementById('healthSimpleTime')?.value || '';
+  await dbAdd('health_log', {dog, date, time, type, severity:document.getElementById('healthSev').value, note:document.getElementById('healthNote').value});
   document.getElementById('healthNote').value='';
+  if (document.getElementById('healthSimpleTime')) document.getElementById('healthSimpleTime').value = '';
   if (document.getElementById('healthDogOverride')) document.getElementById('healthDogOverride').value = '';
   renderToday();
 }
