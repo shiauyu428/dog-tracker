@@ -984,6 +984,17 @@ input[type=date]{font-family:'DM Mono',monospace;}
           </div>
           <button class="btn btn-primary" onclick="migrateDeerSkin()">🦌 一鍵換算鹿皮紀錄</button>
           <div id="migrationResult" style="margin-top:10px;font-size:13px"></div>
+          <hr style="margin:16px 0;border-color:var(--border)">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:10px">
+            <strong>自訂食物單位換算</strong>：過去以「支/個」為單位填入 g 欄，現改為正確 kcal/g 值。<br>
+            以現有 kcal 為主，自動重算 g（kcal 不變，g = kcal ÷ 新 kcal/g）。
+          </div>
+          <div class="form-row" style="margin-bottom:8px">
+            <div class="form-group"><label>食物名稱（需完全一致）</label><input type="text" id="migrateCustomName" placeholder="例：鴨胗"></div>
+            <div class="form-group"><label>正確 kcal/g</label><input type="number" id="migrateCustomKcal" step="0.001" placeholder="例：3.8"></div>
+          </div>
+          <button class="btn btn-primary" onclick="migrateCustomFood()">🔄 一鍵換算</button>
+          <div id="migrateCustomResult" style="margin-top:10px;font-size:13px"></div>
         </div>
       </div>
     </div>
@@ -4933,6 +4944,29 @@ function scheduleSync() {
 }
 
 
+async function migrateCustomFood() {
+  const name = document.getElementById('migrateCustomName').value.trim();
+  const kcalPerG = parseFloat(document.getElementById('migrateCustomKcal').value);
+  const resultEl = document.getElementById('migrateCustomResult');
+  if (!name) { resultEl.textContent = '⚠️ 請填入食物名稱'; return; }
+  if (!kcalPerG || kcalPerG <= 0) { resultEl.textContent = '⚠️ 請填入正確的 kcal/g'; return; }
+  resultEl.textContent = '處理中...';
+  const allFoodDb = await dbAll('food_db');
+  const dbEntry = allFoodDb.find(f => f.name === name);
+  if (dbEntry) await dbPut('food_db', {...dbEntry, kcal_per_g: kcalPerG});
+  const allLogs = await dbAll('food_log');
+  const targets = allLogs.filter(f => f.food === name);
+  let count = 0;
+  for (const log of targets) {
+    const kcal = log.kcal || 0;
+    const newGrams = kcal > 0 ? Math.round(kcal / kcalPerG * 10) / 10 : log.grams;
+    await dbPut('food_log', {...log, grams: newGrams, kcal_per_g: kcalPerG});
+    count++;
+  }
+  invalidateFoodCache();
+  resultEl.innerHTML = `✅ 完成！已更新 ${count} 筆「${name}」紀錄（kcal 不變，g 依 ${kcalPerG} kcal/g 重算）。${dbEntry ? '' : '<br>⚠️ 食物資料庫找不到此名稱，請手動更新 kcal/g。'}`;
+}
+
 async function migrateDeerSkin() {
   const NEW_KCAL_PER_G = 3.73;
   const FOOD_NAME = '菜包 鹿皮';
@@ -4992,7 +5026,7 @@ Object.assign(window, {
   saveActivities, refetchAutofill,
   onTripTypeChange, openTripModal, saveTrip, delTrip, renderTodayTrip, copyOtherDogTrip,
   gdriveSignIn, gdriveSignOut,
-  migrateDeerSkin,
+  migrateDeerSkin, migrateCustomFood,
 });
 
 // 顯示資料修正區（未完成過才顯示）
